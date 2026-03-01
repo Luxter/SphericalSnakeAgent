@@ -1,0 +1,20 @@
+services:
+
+  # ── Serve the browser game ──────────────────────────────────────────────────
+  # http://localhost:8080
+  game:
+    image: nginx:alpine
+    ports:
+      - "8080:80"
+    volumes:
+      - ./game:/usr/share/nginx/html:ro
+    restart: unless-stopped
+
+  agent:
+    build: .
+    volumes:
+      - ../../:/workspace
+    working_dir: /workspace
+    command: bash
+    stdin_open: true
+    tty: true
