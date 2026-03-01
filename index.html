@@ -2,27 +2,15 @@
 
 <html lang='en'>
 <head>
-    <!-- Google tag (gtag.js) -->
-    <script async src="https://www.googletagmanager.com/gtag/js?id=G-V3RS08GZ06"></script>
-    <script>
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    gtag('js', new Date());
-
-    gtag('config', 'G-V3RS08GZ06');
-    </script>
-
     <meta charset='utf-8'>
-    <meta name='description' content='Snake on a sphere'>
-    <meta name='author' content='Kevin Albertson'>
+    <meta name='description' content='Snake on a sphere — Teinforcement Learning Agent'>
+    <meta name='author' content='Łukasz Cyran'>
     <title>Spherical Snake</title>
 
     <link rel="icon" type="image/png" href="favicon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1.0, user-scalable=0" />
 
-    <!-- reCaptcha -->
-    <!-- <script src="https://www.google.com/recaptcha/enterprise.js?render=6Le6rvwqAAAAAIhHsQfZPb6pkU9nUnnkqD5mqADl"></script> -->
-    <script src="https://www.google.com/recaptcha/api.js?render=6Le6rvwqAAAAAIhHsQfZPb6pkU9nUnnkqD5mqADl"></script>
+
     <style type='text/css'>
         * {
             margin: 0;
@@ -61,11 +49,6 @@
             position: absolute;
             top: 200px;
         }
-        /* hide reCaptcha badge */
-        .grecaptcha-badge {
-            display: none !important;
-        }
-
         .hidden {
             display: none;
         }
@@ -140,19 +123,12 @@
             <span class="button" id="move_left"></span>
             <span class="button" id="move_right"></span>
         </div>
-        <div id="leaderboard_area">
+        <div id="info_area">
             <p>To play: Use arrow keys or buttons.</p>
             <p>Press spacebar to go fast.</p>
-            <span style="display:none"><a href="#" id="submit_last_score" class="hidden"></a></span>
-            <div id="show_high_score_section">
-                <span id="high_score"></span><span style="display:none"><a href="#" id="submit_high_score" class="hidden">Submit to
-                    leaderboard</a></span>
-                </div>
-                <div><a href="/spherical_snake/leaderboard/" target="_blank" id="show_high_score_link">See leaderboard</a></div>
-                <p>See <a href="https://github.com/kevinAlbs/SphericalSnake">source on GitHub</a></p>
-            </div>
+            <p>See <a href="https://github.com/Luxter/SphericalSnakeAgent" target="_blank">source on GitHub</a></p>
+        </div>
         </div> <!-- #container -->
-        <script src='leaderboard.js'></script>
         <script>
             // Prevent double-tap-zoom on iOS:
             document.addEventListener("dblclick", (e) => {

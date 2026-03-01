@@ -352,7 +352,6 @@ function checkCollisions() {
     for (var i = 2; i < snake.length; i++) {
          if (collision(snake[0], snake[i])) {
              showEnd();
-             leaderboard.setScore(score);
              return;
          }
     }
