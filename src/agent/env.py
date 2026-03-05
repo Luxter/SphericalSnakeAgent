@@ -5,6 +5,8 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
+from agent.features import compute_obs
+
 
 NODE_ANGLE: float = math.pi / 60
 NODE_QUEUE_SIZE: int = 9
@@ -16,7 +18,14 @@ INITIAL_SNAKE_LENGTH: int = 8
 
 
 def rotate_z(a: float, pts: np.ndarray) -> None:
-    """rotateZ(a) in-place. Accepts (3,) or (N, 3)."""
+    """
+    Apply rotateZ(a) in-place, mirroring the JS rotateZ convention.
+
+    Parameters
+    ----------
+    a   : rotation angle in radians.
+    pts : array of shape (3,) or (N, 3) — modified in place.
+    """
     p = pts[np.newaxis] if pts.ndim == 1 else pts
     cos_a, sin_a = math.cos(a), math.sin(a)
     x = p[:, 0].copy()  # must copy: x is overwritten before being used in row 2
@@ -25,7 +34,18 @@ def rotate_z(a: float, pts: np.ndarray) -> None:
 
 
 def rotate_y(a: float, pts: np.ndarray) -> None:
-    """rotateY(a) in-place — JS non-standard convention. Accepts (3,) or (N, 3)."""
+    """
+    Apply rotateY(a) in-place, mirroring the JS rotateY convention.
+
+    Note: the JS game uses a non-standard rotateY where the sign of the
+    x↔z cross-terms is swapped relative to the standard right-hand rule.
+    This implementation matches that convention exactly.
+
+    Parameters
+    ----------
+    a   : rotation angle in radians.
+    pts : array of shape (3,) or (N, 3) — modified in place.
+    """
     p = pts[np.newaxis] if pts.ndim == 1 else pts
     cos_a, sin_a = math.cos(a), math.sin(a)
     x = p[:, 0].copy()  # must copy: x is overwritten before being used in row 2
@@ -62,6 +82,22 @@ class SphericalSnakeEnv(gym.Env):
         seed: Optional[int] = None,
         options: Optional[dict] = None,
     ):
+        """
+        Reset the environment to its initial state.
+
+        Spawns a fresh 8-node snake at the south pole with direction=π/4,
+        then places a random pellet via _regenerate_pellet().
+
+        Parameters
+        ----------
+        seed    : optional RNG seed passed to gymnasium's np_random.
+        options : unused; accepted for API compatibility.
+
+        Returns
+        -------
+        obs  : np.ndarray, shape (15,), dtype float32 — initial observation.
+        info : dict — empty dict (no extra info on reset).
+        """
         super().reset(seed=seed)
 
         self.direction = STARTING_DIRECTION
@@ -75,10 +111,33 @@ class SphericalSnakeEnv(gym.Env):
             self._add_snake_node()
 
         self.pellet = self._regenerate_pellet()
-        obs = self._compute_obs()
+        obs = compute_obs(self.snake, self.pellet, self.direction)
         return obs, {}
 
     def step(self, action: int):
+        """
+        Advance the simulation by one tick.
+
+        Tick order mirrors the JS game:
+          1. Check collisions on the *current* positions.
+          2. Update direction based on action.
+          3. Move snake nodes (applySnakeRotation).
+          4. Apply world rotation to all points.
+          5. Compute reward and next observation.
+
+        Parameters
+        ----------
+        action : int — 0=STRAIGHT, 1=LEFT (direction-=0.08), 2=RIGHT (direction+=0.08).
+
+        Returns
+        -------
+        obs        : np.ndarray, shape (15,), dtype float32.
+        reward     : float — +1.0 pellet eaten, -1.0 self-collision,
+                     +0.05*(prev_dist-new_dist) progress shaping, -0.001 time penalty.
+        terminated : bool — True if the snake hit itself.
+        truncated  : bool — always False (no time limit).
+        info       : dict with key 'score' (int, pellets eaten this episode).
+        """
         assert not self._terminated, "Episode has ended; call reset() first."
 
         prev_dist = self._angular_dist_to_pellet()
@@ -88,7 +147,7 @@ class SphericalSnakeEnv(gym.Env):
 
         if self_collision:
             self._terminated = True
-            obs = self._compute_obs()
+            obs = compute_obs(self.snake, self.pellet, self.direction)
             return obs, -1.0, True, False, {"score": self.score}
 
         # --- 2. Apply action → update direction ----------------------------
@@ -108,13 +167,19 @@ class SphericalSnakeEnv(gym.Env):
         new_dist = self._angular_dist_to_pellet()
         reward = (1.0 if eaten else 0.0) + 0.05 * (prev_dist - new_dist) - 0.001
 
-        obs = self._compute_obs()
+        obs = compute_obs(self.snake, self.pellet, self.direction)
         return obs, float(reward), False, False, {"score": self.score}
 
     def _regenerate_pellet(self) -> np.ndarray:
         """
         Mirrors JS regeneratePellet() / pointFromSpherical().
-        Uniform random (theta, phi) — intentionally non-uniform on sphere surface.
+
+        Samples (theta, phi) uniformly — intentionally non-uniform on the sphere
+        surface (no sin(φ) density correction), matching the JS distribution.
+
+        Returns
+        -------
+        np.ndarray, shape (3,), dtype float64 — unit-sphere Cartesian point.
         """
         theta = self.np_random.uniform(0.0, 2.0 * math.pi)
         phi = self.np_random.uniform(0.0, math.pi)
@@ -126,11 +191,18 @@ class SphericalSnakeEnv(gym.Env):
 
     def _add_snake_node(self) -> None:
         """
-        Mirrors JS addSnakeNode().
-        New node starts with posQueue filled with None (NODE_QUEUE_SIZE entries).
-        Position is determined by the tail of the last node's posQueue, or by
-        rotating backward using STARTING_DIRECTION if that entry is still None.
-        First node ever is placed at the north pole (0, 0, 1).
+        Append a new tail node to self.snake, mirroring JS addSnakeNode().
+
+        The new node's posQueue is initialised to [None]*NODE_QUEUE_SIZE.
+        Its starting position is:
+          • (0, 0, -1) if this is the very first node (south pole).
+          • self.pos_queues[-1][-1] if that queue entry is not None
+            (the preceding tail's oldest position history entry).
+          • Otherwise the fallback: rotate the current tail position
+            backward one step using STARTING_DIRECTION (matches JS behaviour
+            during the first NODE_QUEUE_SIZE ticks of a node's life).
+
+        Modifies self.snake (extended by one row) and self.pos_queues in place.
         """
         queue: list = [None] * NODE_QUEUE_SIZE
 
@@ -221,12 +293,19 @@ class SphericalSnakeEnv(gym.Env):
 
     def _check_collisions(self) -> tuple[bool, bool]:
         """
-        Mirrors JS checkCollisions().
-        Returns (pellet_eaten, self_collision).
+        Check pellet and self-collision for the current frame, mirroring JS checkCollisions().
 
-        Self-collision: head vs snake[i] for i >= 2 (index 1 is always adjacent).
-        Pellet collision triggers regeneratePellet() + addSnakeNode() + score++.
-        Self-collision takes priority — if both happen, returns (False, True).
+        Self-collision is tested against snake[i] for i ≥ 2 (node 1 is always
+        adjacent to the head and cannot collide). If a self-collision is detected
+        the pellet check is skipped.
+
+        A pellet collision triggers _regenerate_pellet(), _add_snake_node(), and
+        increments self.score.
+
+        Returns
+        -------
+        pellet_eaten   : bool — True if the head overlapped the pellet this tick.
+        self_collision : bool — True if the head overlapped any body node i ≥ 2.
         """
         head = self.snake[0]
 
@@ -247,11 +326,12 @@ class SphericalSnakeEnv(gym.Env):
         return eaten, False
 
     def _angular_dist_to_pellet(self) -> float:
-        """Great-circle angular distance head → pellet, in [0, π]."""
+        """
+        Compute the great-circle angular distance from the head to the pellet.
+
+        Returns
+        -------
+        float — angle in radians, range [0, π].
+        """
         dot = float(np.clip(np.dot(self.snake[0], self.pellet), -1.0, 1.0))
         return math.acos(dot)
-
-    def _compute_obs(self) -> np.ndarray:
-        """Delegate to features.compute_obs (implemented in Step 2)."""
-        from agent.features import compute_obs  # lazy import; stub until Step 2
-        return compute_obs(self.snake, self.pos_queues, self.pellet, self.direction)
