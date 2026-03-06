@@ -8,8 +8,19 @@
             "extensions": [
                 "ms-python.python",
                 "ms-python.pylance",
-                "ms-toolsai.tensorboard"
-            ]
+                "ms-toolsai.tensorboard",
+                "charliermarsh.ruff"
+            ],
+            "settings": {
+                "editor.formatOnSave": true,
+                "[python]": {
+                    "editor.defaultFormatter": "charliermarsh.ruff",
+                    "editor.codeActionsOnSave": {
+                        "source.fixAll.ruff": "explicit",
+                        "source.organizeImports.ruff": "explicit"
+                    }
+                }
+            }
         }
     }
 }

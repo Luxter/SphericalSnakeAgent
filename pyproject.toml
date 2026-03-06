@@ -1,0 +1,41 @@
+[project]
+name = "spherical-snake-agent"
+version = "0.1.0"
+description = "Reinforcement Learning agent for the Spherical Snake environment."
+authors = [{ name = "Łukasz Cyran", email = "lukasz.cyran92@gmail.com" }]
+readme = "README.md"
+requires-python = ">=3.14"
+license = { text = "MIT License" }
+keywords = ["Reinforcement Learning", "game", "RL", "AI", "gymnasium", "snake"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
+dependencies = [
+    "gymnasium==1.2.3",
+    "numpy==2.4.2",
+    "rich==14.3.3",
+    "setuptools==81.0.0",
+    "stable-baselines3==2.7.1",
+    "tensorboard==2.20.0",
+    "tqdm==4.67.3",
+    "typer==0.24.1",
+]
+
+[project.optional-dependencies]
+dev = ["pre-commit"]
+
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project.urls]
+Repository = "https://github.com/Luxter/SphericalSnakeAgent"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 119

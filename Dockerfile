@@ -6,10 +6,8 @@ RUN git config --global --add safe.directory /workspace
 
 WORKDIR /workspace
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Copy source so the image can be used standalone (volumes override at runtime)
+# Install the agent package and all its dependencies
 COPY . .
+RUN pip install --no-cache-dir -e .
 
 CMD ["bash"]
