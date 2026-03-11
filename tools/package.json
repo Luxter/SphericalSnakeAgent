@@ -1,0 +1,8 @@
+{
+  "name": "spherical-snake-tools",
+  "private": true,
+  "dependencies": {
+    "canvas": "^2.11.2",
+    "gifencoder": "^2.0.1"
+  }
+}

@@ -52,6 +52,7 @@ def rotate_y(a: float, pts: np.ndarray) -> None:
     p[:, 0] = cos_a * x + sin_a * p[:, 2]
     p[:, 2] = -sin_a * x + cos_a * p[:, 2]
 
+
 class SphericalSnakeEnv(gym.Env):
     """
     observation_space: Box(shape=(15,), dtype=float32)  — see features.py
@@ -62,9 +63,7 @@ class SphericalSnakeEnv(gym.Env):
 
     def __init__(self) -> None:
         super().__init__()
-        self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32
-        )
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32)
         self.action_space = spaces.Discrete(3)
 
         # State (initialised properly in reset())
@@ -148,7 +147,7 @@ class SphericalSnakeEnv(gym.Env):
         if self_collision:
             self._terminated = True
             obs = compute_obs(self.snake, self.pellet, self.direction)
-            return obs, -1.0, True, False, {"score": self.score}
+            return obs, -10.0, True, False, {"score": self.score}
 
         # --- 2. Apply action → update direction ----------------------------
         if action == 1:
@@ -222,10 +221,7 @@ class SphericalSnakeEnv(gym.Env):
             else:
                 pos = last_queue_tail.copy()
 
-        self.snake = (
-            pos[np.newaxis, :] if len(self.snake) == 0
-            else np.vstack([self.snake, pos[np.newaxis, :]])
-        )
+        self.snake = pos[np.newaxis, :] if len(self.snake) == 0 else np.vstack([self.snake, pos[np.newaxis, :]])
         self.pos_queues.append(queue)
 
     def _apply_snake_rotation(self) -> None:

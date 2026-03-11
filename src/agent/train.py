@@ -56,10 +56,9 @@ app = typer.Typer()
 
 @app.command()
 def main(
-    timesteps: int = typer.Option(200_000_000, help="Total environment steps."),
+    timesteps: int = typer.Option(40_000_000, help="Total environment steps."),
     n_envs: int = typer.Option(16, help="Number of parallel environments."),
-    checkpoint_freq: int = typer.Option(500_000, help="Save a checkpoint every N *total* steps."),
-    eval_freq: int = typer.Option(250_000, help="Run evaluation every N *total* steps."),
+    eval_freq: int = typer.Option(1_000_000, help="Run evaluation every N *total* steps."),
     eval_episodes: int = typer.Option(10, help="Episodes per evaluation."),
     max_episode_steps: int = typer.Option(10_000, help="TimeLimit per episode in steps."),
 ):
@@ -95,7 +94,7 @@ def main(
     )
 
     checkpoint_cb = CheckpointCallback(
-        save_freq=max(checkpoint_freq // n_envs, 1),
+        save_freq=max(eval_freq // n_envs, 1),
         save_path=checkpoint_dir,
         name_prefix="spherical_snake",
     )
