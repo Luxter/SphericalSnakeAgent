@@ -2,16 +2,21 @@
 ONNX export for the trained SphericalSnake PPO actor (Step 4).
 
 Extracts the actor sub-network (mlp_extractor.policy_net → action_net →
-softmax) from a stable-baselines3 PPO checkpoint and exports it to ONNX.
+softmax) from a stable-baselines3 PPO checkpoint and exports it to ONNX,
+then writes game/agent_model.js with the model embedded as base64 so it can
+be loaded from a file:// origin without a web server.
 
 Usage
 -----
-    python -m agent.export_onnx runs/PPO_9/best/best_model.zip
-    # → writes runs/PPO_9/best/best_model.onnx
+    python -m agent.export_onnx runs/PPO_N/best/best_model.zip
+    # → writes runs/PPO_N/best/best_model.onnx
+    # → writes runs/PPO_N/best/agent_model.js
 """
 
+import base64
 from pathlib import Path
 
+import onnx
 import torch
 import torch.nn as nn
 import typer
@@ -60,7 +65,20 @@ def main(
         dynamic_shapes={"obs": {0: batch}},
         opset_version=18,
     )
+
+    # Inline any external-data sidecar into a single self-contained file.
+    model_proto = onnx.load(out_path, load_external_data=True)
+    sidecar = Path(out_path + ".data")
+    if sidecar.exists():
+        sidecar.unlink()
+    onnx.save(model_proto, out_path, save_as_external_data=False)
     print(f"Exported ONNX : {out_path}")
+
+    # Write agent_model.js next to the .onnx — base64-embedded for file:// origin.
+    js_path = Path(out_path).with_name("agent_model.js")
+    b64 = base64.b64encode(Path(out_path).read_bytes()).decode()
+    js_path.write_text(f'var AGENT_ONNX_B64 = "{b64}";\n')
+    print(f"Embedded JS   : {js_path}")
 
 
 if __name__ == "__main__":

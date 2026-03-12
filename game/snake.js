@@ -33,6 +33,8 @@ var leftDown, rightDown;
 
 var score = 0;
 
+var aiMode = true;
+
 const btnMoveLeft = document.querySelector("#move_left");
 function setLeft(val) {
     if (val) {
@@ -221,6 +223,7 @@ function update() {
         rotateY(-snakeVelocity);
         rotateZ(direction);
     }
+    if (aiMode) agentStep();
     render();
     window.requestAnimationFrame(update);
 }

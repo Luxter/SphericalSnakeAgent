@@ -110,6 +110,51 @@
             text-decoration: underline;
         }
 
+        #ai_toggle_wrap {
+            position: absolute;
+            top: 52px;
+            right: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(0,0,0,0.45);
+            border-radius: 8px;
+            padding: 6px 11px;
+            cursor: pointer;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        #ai_toggle_wrap span {
+            color: #fff;
+            font-size: 1.2em;
+            font-family: monospace;
+            letter-spacing: 0.03em;
+        }
+        /* slider track */
+        .ai-slider {
+            position: relative;
+            width: 54px;
+            height: 28px;
+            background: #555;
+            border-radius: 28px;
+            transition: background 0.2s;
+            flex-shrink: 0;
+        }
+        .ai-slider.on { background: #4caf50; }
+        /* slider knob */
+        .ai-slider::after {
+            content: '';
+            position: absolute;
+            top: 4px;
+            left: 4px;
+            width: 20px;
+            height: 20px;
+            background: #fff;
+            border-radius: 50%;
+            transition: left 0.2s;
+        }
+        .ai-slider.on::after { left: 30px; }
+
     </style>
 
 </head>
@@ -119,6 +164,10 @@
         <p id="score">Score: 0</p>
         <p id='gg'>Good game! <a id="refresh" href="#">Play again?</a></p>
         <canvas width='358' height='360'></canvas>
+        <div id="ai_toggle_wrap" onclick="toggleAI()">
+            <span>🤖 AI</span>
+            <div class="ai-slider on" id="ai_slider"></div>
+        </div>
         <div id="mobile_controls">
             <span class="button" id="move_left"></span>
             <span class="button" id="move_right"></span>
@@ -135,7 +184,17 @@
                 e.preventDefault();
             });
         </script>
+    <script src='https://cdn.jsdelivr.net/npm/onnxruntime-web/dist/ort.min.js'></script>
+    <script src='agent_model.js'></script>
+    <script src='agent.js'></script>
     <script src='snake.js'></script>
+    <script>
+        function toggleAI() {
+            aiMode = !aiMode;
+            document.getElementById('ai_slider').classList.toggle('on', aiMode);
+            if (!aiMode) { setLeft(false); setRight(false); }
+        }
+    </script>
     
 </body>
 </html>
