@@ -16,6 +16,7 @@
 // Constants — must match features.py exactly
 // ---------------------------------------------------------------------------
 const _WHISKER_OFFSETS = [
+     0.0,                //   0°    — front
      Math.PI / 8,        // +22.5°
     -Math.PI / 8,        // -22.5°
      3 * Math.PI / 8,    // +67.5°
@@ -36,7 +37,7 @@ const _MAX_DIST = Math.PI;
 // dir     : game's `direction` (radians)
 // ---------------------------------------------------------------------------
 function _computeObs(snake, pellet, dir) {
-    const obs = new Float32Array(15);
+    const obs = new Float32Array(16);
 
     const cosD = Math.cos(dir);
     const sinD = Math.sin(dir);
@@ -61,7 +62,7 @@ function _computeObs(snake, pellet, dir) {
     // head is always (0, 0, -1) so dot(head, pellet) = -pellet.z
     obs[2] = Math.acos(Math.max(-1.0, Math.min(1.0, -pellet.z))) / _MAX_DIST;
 
-    // --- indices 3-10 : whiskers ---
+    // --- indices 3-11 : whiskers ---
     const nNodes = snake.length;
     for (let wi = 0; wi < _WHISKER_OFFSETS.length; wi++) {
         const alpha = dir + _WHISKER_OFFSETS[wi];
@@ -81,15 +82,15 @@ function _computeObs(snake, pellet, dir) {
         obs[3 + wi] = 1.0 - minArc / _MAX_DIST;
     }
 
-    // --- index 11 : head z (invariantly -1 under world-rotation scheme) ---
-    obs[11] = snake[0].z;
+    // --- index 12 : head z (invariantly -1 under world-rotation scheme) ---
+    obs[12] = snake[0].z;
 
-    // --- indices 12-13 : sin/cos of direction ---
-    obs[12] = sinD;
-    obs[13] = cosD;
+    // --- indices 13-14 : sin/cos of direction ---
+    obs[13] = sinD;
+    obs[14] = cosD;
 
-    // --- index 14 : snake length normalised ---
-    obs[14] = nNodes / 50.0;
+    // --- index 15 : snake length normalised ---
+    obs[15] = nNodes / 50.0;
 
     return obs;
 }
@@ -122,7 +123,7 @@ async function agentStep() {
     if (!agentReady) return;
 
     const obs     = _computeObs(snake, pellet, direction);
-    const tensor  = new ort.Tensor("float32", obs, [1, 15]);
+    const tensor  = new ort.Tensor("float32", obs, [1, obs.length]);
     const results = await _session.run({ obs: tensor });
     const probs   = results["action_probs"].data;   // Float32Array length 3
 
