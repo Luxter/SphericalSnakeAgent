@@ -16,7 +16,6 @@
 // Constants — must match features.py exactly
 // ---------------------------------------------------------------------------
 const _WHISKER_OFFSETS = [
-     0.0,                //   0°    — front
      Math.PI / 8,        // +22.5°
     -Math.PI / 8,        // -22.5°
      3 * Math.PI / 8,    // +67.5°
@@ -37,7 +36,7 @@ const _MAX_DIST = Math.PI;
 // dir     : game's `direction` (radians)
 // ---------------------------------------------------------------------------
 function _computeObs(snake, pellet, dir) {
-    const obs = new Float32Array(16);
+    const obs = new Float32Array(15);
 
     const cosD = Math.cos(dir);
     const sinD = Math.sin(dir);
@@ -62,7 +61,7 @@ function _computeObs(snake, pellet, dir) {
     // head is always (0, 0, -1) so dot(head, pellet) = -pellet.z
     obs[2] = Math.acos(Math.max(-1.0, Math.min(1.0, -pellet.z))) / _MAX_DIST;
 
-    // --- indices 3-11 : whiskers ---
+    // --- indices 3-10 : whiskers ---
     const nNodes = snake.length;
     for (let wi = 0; wi < _WHISKER_OFFSETS.length; wi++) {
         const alpha = dir + _WHISKER_OFFSETS[wi];
@@ -82,17 +81,120 @@ function _computeObs(snake, pellet, dir) {
         obs[3 + wi] = 1.0 - minArc / _MAX_DIST;
     }
 
-    // --- index 12 : head z (invariantly -1 under world-rotation scheme) ---
-    obs[12] = snake[0].z;
+    // --- index 11 : head z (invariantly -1 under world-rotation scheme) ---
+    obs[11] = snake[0].z;
 
-    // --- indices 13-14 : sin/cos of direction ---
-    obs[13] = sinD;
-    obs[14] = cosD;
+    // --- indices 12-13 : sin/cos of direction ---
+    obs[12] = sinD;
+    obs[13] = cosD;
 
-    // --- index 15 : snake length normalised ---
-    obs[15] = nNodes / 50.0;
+    // --- index 14 : snake length normalised ---
+    obs[14] = nNodes / 50.0;
 
     return obs;
+}
+
+// ---------------------------------------------------------------------------
+// Whisker visualisation
+// ---------------------------------------------------------------------------
+
+// Arc-distance at which to draw the far edge of each whisker cone.
+const _WHISKER_DISPLAY_ARC = Math.PI / 4;
+
+// Half-angle of each whisker cone (22.5°), matching _COS_HALF in features.py.
+const _WHISKER_HALF_ANGLE = Math.PI / 8;
+
+// Latest obs stored so snake.js render() can call drawWhiskers().
+var _lastObs = null;
+
+/**
+ * Project a unit-sphere point to canvas coordinates.
+ * The sphere point is given as (rayX, rayY) in the tangent plane at arc
+ * distance `arc` from the head (head is always at (0,0,-1)).
+ */
+function _sphereToScreen(rayX, rayY, arc) {
+    const s = Math.sin(arc);
+    const c = Math.cos(arc);
+    const ex = s * rayX;
+    const ey = s * rayY;
+    const pz = -c + 2;          // ez = -cos(arc), then +2 for perspective
+    return {
+        sx: -ex * focalLength / pz + centerX,
+        sy: -ey * focalLength / pz + centerY,
+    };
+}
+
+/**
+ * Draw the whisker cones from the snake head onto the canvas.
+ * Each cone is ±22.5° wide; two edge lines and a filled triangle represent it.
+ * Must be called from render() after the world has been rotated so
+ * that the head is at (0, 0, -1) — which is always the case here.
+ *
+ * @param {Float32Array} obs  — the 15-element observation vector
+ */
+function drawWhiskers(obs) {
+    const L    = _WHISKER_DISPLAY_ARC;
+    const HALF = _WHISKER_HALF_ANGLE;
+
+    // Head projects to canvas centre.
+    const hx = centerX;
+    const hy = centerY;
+
+    for (let wi = 0; wi < _WHISKER_OFFSETS.length; wi++) {
+        const alpha = direction + _WHISKER_OFFSETS[wi];
+        const val   = obs[3 + wi];   // 0 = safe, 1 = imminent collision
+
+        // Centre ray direction for label / dot placement.
+        const rayX = -Math.cos(alpha);
+        const rayY = -Math.sin(alpha);
+
+        // Screen endpoints of the two cone edges (left = −HALF, right = +HALF).
+        const leftAlpha  = alpha - HALF;
+        const rightAlpha = alpha + HALF;
+        const left  = _sphereToScreen(-Math.cos(leftAlpha),  -Math.sin(leftAlpha),  L);
+        const right = _sphereToScreen(-Math.cos(rightAlpha), -Math.sin(rightAlpha), L);
+
+        // Colour: green (safe) → yellow → red (danger).
+        const r = Math.min(255, Math.round(val * 2.0 * 255));
+        const g = Math.min(255, Math.round((1.0 - val) * 2.0 * 255));
+
+        // Filled cone triangle.
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(left.sx,  left.sy);
+        ctx.lineTo(right.sx, right.sy);
+        ctx.closePath();
+        ctx.fillStyle = `rgba(${r},${g},0,0.2)`;
+        ctx.fill();
+
+        // Cone edge lines.
+        ctx.strokeStyle = `rgba(${r},${g},0,0.55)`;
+        ctx.lineWidth   = 1.0;
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(left.sx,  left.sy);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(hx, hy);
+        ctx.lineTo(right.sx, right.sy);
+        ctx.stroke();
+
+        // Value label along the centre ray at ~60 % of display arc.
+        const lbl  = _sphereToScreen(rayX, rayY, L * 0.6);
+        const label = val.toFixed(2);
+        ctx.font = "bold 9px monospace";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.strokeStyle = "rgba(0,0,0,0.7)";
+        ctx.lineWidth = 2.5;
+        ctx.strokeText(label, lbl.sx, lbl.sy);
+        ctx.fillStyle = `rgba(${r},${g},0,1)`;
+        ctx.fillText(label, lbl.sx, lbl.sy);
+    }
+
+    ctx.lineWidth = 1;  // restore default
+    ctx.textAlign = "start";
+    ctx.textBaseline = "alphabetic";
 }
 
 // ---------------------------------------------------------------------------
@@ -123,6 +225,7 @@ async function agentStep() {
     if (!agentReady) return;
 
     const obs     = _computeObs(snake, pellet, direction);
+    _lastObs      = obs;   // expose for whisker visualisation
     const tensor  = new ort.Tensor("float32", obs, [1, obs.length]);
     const results = await _session.run({ obs: tensor });
     const probs   = results["action_probs"].data;   // Float32Array length 3

@@ -9,28 +9,27 @@ Observation layout:
   0     | pellet_bearing_sin  — sin of signed lateral angle head→pellet
   1     | pellet_bearing_cos  — cos of same (avoids ±π discontinuity)
   2     | pellet_dist         — great-circle distance head→pellet / π
-  3-11  | whiskers[9]         — 9 rays; 0=safe, 1=imminent collision
-  12    | head_z              — z coordinate of head
-  13    | sin(direction)
-  14    | cos(direction)
-  15    | snake_len_norm       — len(snake) / 50
+  3-10  | whiskers[8]         — 8 rays; 0=safe, 1=imminent collision
+  11    | head_z              — z coordinate of head
+  12    | sin(direction)
+  13    | cos(direction)
+  14    | snake_len_norm       — len(snake) / 50
 """
 
 import math
 import numpy as np
 
 
-# Whisker ray offsets from heading angle, indices 3-11
+# Whisker ray offsets from heading angle, indices 3-10
 _WHISKER_OFFSETS: tuple = (
-    0.0,  #   0°    (index 3)  — front
-    math.pi / 8,  # +22.5°  (index 4)
-    -math.pi / 8,  # -22.5°  (index 5)
-    3 * math.pi / 8,  # +67.5°  (index 6)
-    -3 * math.pi / 8,  # -67.5°  (index 7)
-    5 * math.pi / 8,  # +112.5° (index 8)
-    -5 * math.pi / 8,  # -112.5° (index 9)
-    7 * math.pi / 8,  # +157.5° (index 10)
-    -7 * math.pi / 8,  # -157.5° (index 11)
+    math.pi / 8,  # +22.5°  (index 3)
+    -math.pi / 8,  # -22.5°  (index 4)
+    3 * math.pi / 8,  # +67.5°  (index 5)
+    -3 * math.pi / 8,  # -67.5°  (index 6)
+    5 * math.pi / 8,  # +112.5° (index 7)
+    -5 * math.pi / 8,  # -112.5° (index 8)
+    7 * math.pi / 8,  # +157.5° (index 9)
+    -7 * math.pi / 8,  # -157.5° (index 10)
 )
 
 # Cosine of the whisker half-angle (22.5°).  A body node is inside the cone
@@ -56,7 +55,7 @@ def compute_obs(
     pellet     : (3,) float64 — unit-sphere food position.
     direction  : float — current heading angle (radians).
     """
-    obs = np.empty(16, dtype=np.float32)
+    obs = np.empty(15, dtype=np.float32)
 
     head = snake[0]
     cos_d = math.cos(direction)
@@ -127,19 +126,19 @@ def compute_obs(
         obs[3 + wi] = float(1.0 - min_arc / _MAX_DIST)
 
     # ------------------------------------------------------------------
-    # Index 12 : head z coordinate
+    # Index 11 : head z coordinate
     # ------------------------------------------------------------------
-    obs[12] = float(head[2])
+    obs[11] = float(head[2])
 
     # ------------------------------------------------------------------
-    # Indices 13-14 : sin/cos of direction
+    # Indices 12-13 : sin/cos of direction
     # ------------------------------------------------------------------
-    obs[13] = float(sin_d)
-    obs[14] = float(cos_d)
+    obs[12] = float(sin_d)
+    obs[13] = float(cos_d)
 
     # ------------------------------------------------------------------
-    # Index 15 : snake length normalised
+    # Index 14 : snake length normalised
     # ------------------------------------------------------------------
-    obs[15] = float(n_nodes / 50.0)
+    obs[14] = float(n_nodes / 50.0)
 
     return obs

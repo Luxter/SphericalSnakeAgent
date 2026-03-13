@@ -55,7 +55,7 @@ def rotate_y(a: float, pts: np.ndarray) -> None:
 
 class SphericalSnakeEnv(gym.Env):
     """
-    observation_space: Box(shape=(16,), dtype=float32)  — see features.py
+    observation_space: Box(shape=(15,), dtype=float32)  — see features.py
     action_space:      Discrete(3)  — 0=STRAIGHT, 1=LEFT, 2=RIGHT
     """
 
@@ -63,7 +63,7 @@ class SphericalSnakeEnv(gym.Env):
 
     def __init__(self) -> None:
         super().__init__()
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(16,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32)
         self.action_space = spaces.Discrete(3)
 
         # State (initialised properly in reset())

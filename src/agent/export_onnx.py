@@ -53,7 +53,7 @@ def main(
     actor.eval()
 
     out_path = str(Path(model_path).with_suffix(".onnx"))
-    dummy = torch.zeros(1, 16, dtype=torch.float32)
+    dummy = torch.zeros(1, 15, dtype=torch.float32)
 
     batch = torch.export.Dim("batch", min=1, max=1024)
     torch.onnx.export(

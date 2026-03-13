@@ -7,7 +7,7 @@ var NODE_QUEUE_SIZE = 9;
 
 var STARTING_DIRECTION = Math.PI / 4;
 
-var cnv, ctx, width, height, centerX, centerY, points, stopped;
+var cnv, ctx, width, height, centerX, centerY, points, stopped, paused;
 
 var clock; // Absolute time since last update.
 var accumulatedDelta = 0; // How much delta time is built up.
@@ -67,6 +67,7 @@ window.addEventListener('keydown', function(e) {
     if (e.key == "ArrowLeft") setLeft(true);
     if (e.key == "ArrowRight") setRight(true);
     if (e.key == " ") updateSnakeVelocity(true);
+    if (e.key == "Escape") togglePause();
 });
 
 window.addEventListener('keyup', function(e) {
@@ -198,8 +199,17 @@ function init() {
     window.requestAnimationFrame(update);
 }
 
-function update() {
+function togglePause() {
     if (stopped) return;
+    paused = !paused;
+    if (!paused) {
+        clock = Date.now();  // avoid time jump after un-pausing
+        window.requestAnimationFrame(update);
+    }
+}
+
+function update() {
+    if (stopped || paused) return;
     var curr = Date.now();
     var delta = curr - clock;
     clock = curr;
@@ -267,6 +277,11 @@ function render() {
     }
 
     drawPoint(pellet, NODE_ANGLE, 0);
+
+    // Draw whisker rays when the AI is playing.
+    if (aiMode && typeof drawWhiskers === 'function' && _lastObs) {
+        drawWhiskers(_lastObs);
+    }
 
     // Draw angle.
     ctx.beginPath();
