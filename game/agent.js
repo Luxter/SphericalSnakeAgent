@@ -32,8 +32,6 @@ const _WHISKER_OFFSETS = [
 ];
 // Per-whisker half-angles (radians) and pre-computed cosines for cone tests.
 // Front 6: π/18 (10°) — 20° total.  Rear 4: π/6 (30°) — 60° total.
-// Each threshold is expanded by NODE_ANGLE so that a node whose body overlaps
-// a cone boundary is detected even if its centre lies just outside.
 // NODE_ANGLE is declared in snake.js (var NODE_ANGLE = Math.PI / 60).
 const _WHISKER_HALF_ANGLES = [
     Math.PI / 18,  // +10°
@@ -47,7 +45,7 @@ const _WHISKER_HALF_ANGLES = [
     Math.PI / 6,   // +150°
     Math.PI / 6,   // -150°
 ];
-const _WHISKER_COS_HALF = _WHISKER_HALF_ANGLES.map(h => Math.cos(h + NODE_ANGLE));
+const _WHISKER_COS_HALF = _WHISKER_HALF_ANGLES.map(h => Math.cos(h));
 const _MAX_DIST = Math.PI;
 
 // ---------------------------------------------------------------------------
@@ -163,9 +161,7 @@ function drawWhiskers(obs) {
 
     for (let wi = 0; wi < _WHISKER_OFFSETS.length; wi++) {
         const alpha = direction + _WHISKER_OFFSETS[wi];
-        // Draw at the effective boundary (half-angle + NODE_ANGLE) so the
-        // visualised cone matches the actual detection region.
-        const HALF  = _WHISKER_HALF_ANGLES[wi] + NODE_ANGLE;
+        const HALF  = _WHISKER_HALF_ANGLES[wi];
         const val   = obs[3 + wi];   // 0 = safe, 1 = imminent collision
 
         // Centre ray direction for label / dot placement.

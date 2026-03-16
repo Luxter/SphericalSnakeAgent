@@ -44,8 +44,6 @@ _WHISKER_OFFSETS: tuple = (
 # Per-whisker half-angles.  A body node is inside cone wi when its alignment
 # dot-product with the ray direction exceeds _WHISKER_COS_HALF[wi].
 # Front 6: π/18 (10°) — 20° total cone.  Rear 4: π/6 (30°) — 60° total cone.
-# Each half-angle is expanded by NODE_ANGLE so that a node whose body overlaps
-# a cone boundary is correctly detected even if its centre lies just outside.
 _WHISKER_HALF_ANGLES: tuple = (
     math.pi / 18,  # +10°
     math.pi / 18,  # -10°
@@ -58,7 +56,7 @@ _WHISKER_HALF_ANGLES: tuple = (
     math.pi / 6,  # +150°
     math.pi / 6,  # -150°
 )
-_WHISKER_COS_HALF: tuple = tuple(math.cos(h + NODE_ANGLE) for h in _WHISKER_HALF_ANGLES)
+_WHISKER_COS_HALF: tuple = tuple(math.cos(h) for h in _WHISKER_HALF_ANGLES)
 
 # Maximum great-circle distance used to normalise whisker and pellet readings.
 _MAX_DIST: float = math.pi
