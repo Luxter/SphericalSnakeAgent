@@ -5,10 +5,8 @@ import numpy as np
 import gymnasium as gym
 from gymnasium import spaces
 
-from agent.features import compute_obs
+from agent.features import compute_obs, NODE_ANGLE
 
-
-NODE_ANGLE: float = math.pi / 60
 NODE_QUEUE_SIZE: int = 9
 STARTING_DIRECTION: float = math.pi / 4
 COLLISION_DISTANCE: float = 2.0 * math.sin(NODE_ANGLE)
@@ -63,7 +61,7 @@ class SphericalSnakeEnv(gym.Env):
 
     def __init__(self) -> None:
         super().__init__()
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(15,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(17,), dtype=np.float32)
         self.action_space = spaces.Discrete(3)
 
         # State (initialised properly in reset())

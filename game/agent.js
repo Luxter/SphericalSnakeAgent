@@ -15,17 +15,39 @@
 // ---------------------------------------------------------------------------
 // Constants — must match features.py exactly
 // ---------------------------------------------------------------------------
+// Front 6 (indices 0-5): ±10°, ±30°, ±50° — narrow 20° cones, high forward resolution.
+// Rear  4 (indices 6-9): ±90°, ±150°       — wide  60° cones, coarse background awareness.
+// Tiling: front covers ±60°; ±90° covers 60°→120°; ±150° covers 120°→180°. Perfect 360°.
 const _WHISKER_OFFSETS = [
-     Math.PI / 8,        // +22.5°
-    -Math.PI / 8,        // -22.5°
-     3 * Math.PI / 8,    // +67.5°
-    -3 * Math.PI / 8,    // -67.5°
-     5 * Math.PI / 8,    // +112.5°
-    -5 * Math.PI / 8,    // -112.5°
-     7 * Math.PI / 8,    // +157.5°
-    -7 * Math.PI / 8,    // -157.5°
+     Math.PI / 18,        // +10°
+    -Math.PI / 18,        // -10°
+     Math.PI / 6,         // +30°
+    -Math.PI / 6,         // -30°
+     5 * Math.PI / 18,    // +50°
+    -5 * Math.PI / 18,    // -50°
+     Math.PI / 2,         // +90°
+    -Math.PI / 2,         // -90°
+     5 * Math.PI / 6,     // +150°
+    -5 * Math.PI / 6,     // -150°
 ];
-const _COS_HALF = Math.cos(Math.PI / 8);   // cos(22.5°)
+// Per-whisker half-angles (radians) and pre-computed cosines for cone tests.
+// Front 6: π/18 (10°) — 20° total.  Rear 4: π/6 (30°) — 60° total.
+// Each threshold is expanded by NODE_ANGLE so that a node whose body overlaps
+// a cone boundary is detected even if its centre lies just outside.
+// NODE_ANGLE is declared in snake.js (var NODE_ANGLE = Math.PI / 60).
+const _WHISKER_HALF_ANGLES = [
+    Math.PI / 18,  // +10°
+    Math.PI / 18,  // -10°
+    Math.PI / 18,  // +30°
+    Math.PI / 18,  // -30°
+    Math.PI / 18,  // +50°
+    Math.PI / 18,  // -50°
+    Math.PI / 6,   // +90°
+    Math.PI / 6,   // -90°
+    Math.PI / 6,   // +150°
+    Math.PI / 6,   // -150°
+];
+const _WHISKER_COS_HALF = _WHISKER_HALF_ANGLES.map(h => Math.cos(h + NODE_ANGLE));
 const _MAX_DIST = Math.PI;
 
 // ---------------------------------------------------------------------------
@@ -36,7 +58,7 @@ const _MAX_DIST = Math.PI;
 // dir     : game's `direction` (radians)
 // ---------------------------------------------------------------------------
 function _computeObs(snake, pellet, dir) {
-    const obs = new Float32Array(15);
+    const obs = new Float32Array(17);
 
     const cosD = Math.cos(dir);
     const sinD = Math.sin(dir);
@@ -64,32 +86,35 @@ function _computeObs(snake, pellet, dir) {
     // --- indices 3-10 : whiskers ---
     const nNodes = snake.length;
     for (let wi = 0; wi < _WHISKER_OFFSETS.length; wi++) {
-        const alpha = dir + _WHISKER_OFFSETS[wi];
-        const rayX  = -Math.cos(alpha);
-        const rayY  = -Math.sin(alpha);
-        let minArc  = _MAX_DIST;
+        const alpha   = dir + _WHISKER_OFFSETS[wi];
+        const rayX    = -Math.cos(alpha);
+        const rayY    = -Math.sin(alpha);
+        const cosHalf = _WHISKER_COS_HALF[wi];
+        let minArc    = _MAX_DIST;
 
         for (let j = 1; j < nNodes; j++) {
             const bx = snake[j].x, by = snake[j].y, bz = snake[j].z;
             const n2d = Math.sqrt(bx * bx + by * by);
             if (n2d < 1e-9) continue;
-            if ((bx * rayX + by * rayY) / n2d < _COS_HALF) continue;
-            const arc = Math.acos(Math.max(-1.0, Math.min(1.0, -bz)));
+            if ((bx * rayX + by * rayY) / n2d < cosHalf) continue;
+            // Subtract 2*NODE_ANGLE to get surface-to-surface gap instead of
+            // center-to-center distance (0 = bodies touching = actual collision).
+            const arc = Math.max(0.0, Math.acos(Math.max(-1.0, Math.min(1.0, -bz))) - 2 * NODE_ANGLE);
             if (arc < minArc) minArc = arc;
         }
 
         obs[3 + wi] = 1.0 - minArc / _MAX_DIST;
     }
 
-    // --- index 11 : head z (invariantly -1 under world-rotation scheme) ---
-    obs[11] = snake[0].z;
+    // --- index 13 : head z (invariantly -1 under world-rotation scheme) ---
+    obs[13] = snake[0].z;
 
-    // --- indices 12-13 : sin/cos of direction ---
-    obs[12] = sinD;
-    obs[13] = cosD;
+    // --- indices 14-15 : sin/cos of direction ---
+    obs[14] = sinD;
+    obs[15] = cosD;
 
-    // --- index 14 : snake length normalised ---
-    obs[14] = nNodes / 50.0;
+    // --- index 16 : snake length normalised ---
+    obs[16] = nNodes / 50.0;
 
     return obs;
 }
@@ -100,9 +125,6 @@ function _computeObs(snake, pellet, dir) {
 
 // Arc-distance at which to draw the far edge of each whisker cone.
 const _WHISKER_DISPLAY_ARC = Math.PI / 4;
-
-// Half-angle of each whisker cone (22.5°), matching _COS_HALF in features.py.
-const _WHISKER_HALF_ANGLE = Math.PI / 8;
 
 // Latest obs stored so snake.js render() can call drawWhiskers().
 var _lastObs = null;
@@ -133,8 +155,7 @@ function _sphereToScreen(rayX, rayY, arc) {
  * @param {Float32Array} obs  — the 15-element observation vector
  */
 function drawWhiskers(obs) {
-    const L    = _WHISKER_DISPLAY_ARC;
-    const HALF = _WHISKER_HALF_ANGLE;
+    const L = _WHISKER_DISPLAY_ARC;
 
     // Head projects to canvas centre.
     const hx = centerX;
@@ -142,6 +163,9 @@ function drawWhiskers(obs) {
 
     for (let wi = 0; wi < _WHISKER_OFFSETS.length; wi++) {
         const alpha = direction + _WHISKER_OFFSETS[wi];
+        // Draw at the effective boundary (half-angle + NODE_ANGLE) so the
+        // visualised cone matches the actual detection region.
+        const HALF  = _WHISKER_HALF_ANGLES[wi] + NODE_ANGLE;
         const val   = obs[3 + wi];   // 0 = safe, 1 = imminent collision
 
         // Centre ray direction for label / dot placement.
@@ -164,11 +188,11 @@ function drawWhiskers(obs) {
         ctx.lineTo(left.sx,  left.sy);
         ctx.lineTo(right.sx, right.sy);
         ctx.closePath();
-        ctx.fillStyle = `rgba(${r},${g},0,0.2)`;
+        ctx.fillStyle = `rgba(${r},${g},0,0.1)`;
         ctx.fill();
 
         // Cone edge lines.
-        ctx.strokeStyle = `rgba(${r},${g},0,0.55)`;
+        ctx.strokeStyle = `rgba(${r},${g},0,0.2)`;
         ctx.lineWidth   = 1.0;
         ctx.beginPath();
         ctx.moveTo(hx, hy);
