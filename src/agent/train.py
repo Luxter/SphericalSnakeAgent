@@ -46,9 +46,9 @@ def _next_run_id(run_dir: str, prefix: str = "PPO") -> int:
     return max(indices, default=0) + 1
 
 
-def make_env(max_episode_steps: int = 10_000):
+def make_env(max_episode_steps: int = 10_000, curriculum_length: int = 0):
     """Factory used by make_vec_env / SubprocVecEnv."""
-    return TimeLimit(SphericalSnakeEnv(), max_episode_steps=max_episode_steps)
+    return TimeLimit(SphericalSnakeEnv(curriculum_length=curriculum_length), max_episode_steps=max_episode_steps)
 
 
 app = typer.Typer()
@@ -61,6 +61,7 @@ def main(
     eval_freq: int = typer.Option(1_000_000, help="Run evaluation every N *total* steps."),
     eval_episodes: int = typer.Option(10, help="Episodes per evaluation."),
     max_episode_steps: int = typer.Option(10_000, help="TimeLimit per episode in steps."),
+    curriculum_length: int = typer.Option(0, help="Number of pellets per episode spawned near the head."),
 ):
     run_dir = os.path.join(_REPO_ROOT, "runs")
     run_id = _next_run_id(run_dir)
@@ -72,7 +73,7 @@ def main(
         make_env,
         n_envs=n_envs,
         vec_env_cls=SubprocVecEnv,
-        env_kwargs={"max_episode_steps": max_episode_steps},
+        env_kwargs={"max_episode_steps": max_episode_steps, "curriculum_length": curriculum_length},
     )
 
     eval_env = make_vec_env(
@@ -84,8 +85,9 @@ def main(
     model = PPO(
         "MlpPolicy",
         train_env,
+        # policy_kwargs={"net_arch": dict(pi=[128, 128], vf=[128, 128])},
         n_steps=2048,
-        batch_size=512,
+        batch_size=4096,
         n_epochs=10,
         learning_rate=3e-4,
         ent_coef=0.01,

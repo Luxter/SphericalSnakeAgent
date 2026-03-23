@@ -14,6 +14,13 @@ SNAKE_VELOCITY: float = NODE_ANGLE * 2.0 / (NODE_QUEUE_SIZE + 1)
 TURN_RATE: float = 0.08
 INITIAL_SNAKE_LENGTH: int = 8
 
+# Curriculum learning: arc-distance bounds for near-pellet placement.
+# The minimum is slightly above the collision threshold so the pellet is
+# not eaten on the very next tick; the maximum keeps it reachable within
+# a few dozen steps from the head (which is always at the south pole).
+_NEAR_PELLET_MIN_ARC: float = COLLISION_DISTANCE + 0.01  # ~0.115 rad
+_NEAR_PELLET_MAX_ARC: float = 0.35  # ~20° arc radius
+
 
 def rotate_z(a: float, pts: np.ndarray) -> None:
     """
@@ -59,10 +66,22 @@ class SphericalSnakeEnv(gym.Env):
 
     metadata = {"render_modes": []}
 
-    def __init__(self) -> None:
+    def __init__(self, curriculum_length: int = 0) -> None:
+        """
+        Parameters
+        ----------
+        curriculum_length : int
+            Number of pellets per episode that are placed close to the head
+            (within ``_NEAR_PELLET_MAX_ARC`` arc distance) to guarantee the
+            snake reaches a high body-count state quickly.  Once
+            ``self.score >= curriculum_length`` pellets spawn uniformly at
+            random (the original behaviour).  Set to 0 (default) to disable
+            curriculum entirely and keep full backward compatibility.
+        """
         super().__init__()
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(25,), dtype=np.float32)
         self.action_space = spaces.Discrete(3)
+        self.curriculum_length: int = curriculum_length
 
         # State (initialised properly in reset())
         # snake mirrors JS: shape (N, 3) of node positions; pos_queues[i] mirrors snake[i].posQueue
@@ -166,6 +185,26 @@ class SphericalSnakeEnv(gym.Env):
 
         obs = compute_obs(self.snake, self.pellet, self.direction)
         return obs, float(reward), False, False, {"score": self.score}
+
+    def _place_nearby_pellet(self) -> np.ndarray:
+        """
+        Place a pellet close to the head for curriculum learning.
+
+        Samples a point on the unit sphere that is between
+        ``_NEAR_PELLET_MIN_ARC`` and ``_NEAR_PELLET_MAX_ARC`` great-circle
+        arc distance from the head.
+
+        Returns
+        -------
+        np.ndarray, shape (3,), dtype float64 — unit-sphere Cartesian point.
+        """
+        arc = self.np_random.uniform(_NEAR_PELLET_MIN_ARC, _NEAR_PELLET_MAX_ARC)
+        bearing = self.np_random.uniform(0.0, 2.0 * math.pi)
+        sin_arc = math.sin(arc)
+        return np.array(
+            [sin_arc * math.cos(bearing), sin_arc * math.sin(bearing), -math.cos(arc)],
+            dtype=np.float64,
+        )
 
     def _regenerate_pellet(self) -> np.ndarray:
         """
@@ -313,9 +352,12 @@ class SphericalSnakeEnv(gym.Env):
         diff = head - self.pellet
         eaten = math.sqrt(float(np.dot(diff, diff))) < COLLISION_DISTANCE
         if eaten:
-            self.pellet = self._regenerate_pellet()
-            self._add_snake_node()
             self.score += 1
+            if self.curriculum_length > 0 and self.score < self.curriculum_length:
+                self.pellet = self._place_nearby_pellet()
+            else:
+                self.pellet = self._regenerate_pellet()
+            self._add_snake_node()
 
         return eaten, False
 
