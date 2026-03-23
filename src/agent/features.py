@@ -1,7 +1,7 @@
 """
 Feature extraction for SphericalSnakeEnv.
 
-    compute_obs(snake, pellet, direction) -> np.ndarray[float32, (17,)]
+    compute_obs(snake, pellet, direction) -> np.ndarray[float32, (25,)]
 
 Observation layout:
   Index | Feature
@@ -9,53 +9,48 @@ Observation layout:
   0     | pellet_bearing_sin  — sin of signed lateral angle head→pellet
   1     | pellet_bearing_cos  — cos of same (avoids ±π discontinuity)
   2     | pellet_dist         — great-circle distance head→pellet / π
-  3-12  | whiskers[10]        — 10 rays; 0=safe, 1=imminent collision
-            Front 6 (±10°, ±30°, ±50°): narrow 20° cones — high angular resolution
-            Rear  4 (±90°, ±150°):       wide  60° cones — coarse background awareness
-  13    | head_z              — z coordinate of head
-  14    | sin(direction)
-  15    | cos(direction)
-  16    | snake_len_norm       — len(snake) / 50
+  3-20  | whiskers[18]        — 18 rays; 0=safe, 1=imminent collision
+            Uniform 20° cones (10° half-angle), 20° spacing, full 360° coverage.
+            0° (front), ±20°, ±40°, ±60°, ±80°, ±100°, ±120°, ±140°, ±160°, 180° (back).
+  21    | head_z              — z coordinate of head
+  22    | sin(direction)
+  23    | cos(direction)
+  24    | snake_len_norm       — len(snake) / 50
 """
 
 import math
 import numpy as np
 
 NODE_ANGLE: float = math.pi / 60  # angular radius of one snake node
+_SIN_NODE_ANGLE: float = math.sin(NODE_ANGLE)  # used for apparent-width cone expansion
 
-# Whisker ray offsets from heading angle, indices 3-12.
-# Front 6 (indices 0-5): ±10°, ±30°, ±50° — narrow cones, high forward resolution.
-# Rear  4 (indices 6-9): ±90°, ±150°      — wide cones, coarse background awareness.
-# Tiling: front covers ±60° (20° cones, no gaps/overlaps); rear picks up at ±60°,
-# ±90° covers 60°→120°, ±150° covers 120°→180° — perfect 360° with zero overlap.
+# Whisker ray offsets from heading angle, indices 3-20.
+# 18 whiskers at 20° spacing, uniform 20° cones (10° half-angle each).
+# One exactly at 0° (front) and one at 180° (back); symmetric ± pairs in between.
+# Coverage: 18 × 20° = 360° with zero gaps and zero overlaps.
 _WHISKER_OFFSETS: tuple = (
-    math.pi / 18,  # +10°  (index 3)
-    -math.pi / 18,  # -10°  (index 4)
-    math.pi / 6,  # +30°  (index 5)
-    -math.pi / 6,  # -30°  (index 6)
-    5 * math.pi / 18,  # +50°  (index 7)
-    -5 * math.pi / 18,  # -50°  (index 8)
-    math.pi / 2,  # +90°  (index 9)
-    -math.pi / 2,  # -90°  (index 10)
-    5 * math.pi / 6,  # +150° (index 11)
-    -5 * math.pi / 6,  # -150° (index 12)
+    0,  #   0° front  (index 3)
+    math.pi / 9,  # +20°        (index 4)
+    -math.pi / 9,  # -20°        (index 5)
+    2 * math.pi / 9,  # +40°        (index 6)
+    -2 * math.pi / 9,  # -40°        (index 7)
+    math.pi / 3,  # +60°        (index 8)
+    -math.pi / 3,  # -60°        (index 9)
+    4 * math.pi / 9,  # +80°        (index 10)
+    -4 * math.pi / 9,  # -80°        (index 11)
+    5 * math.pi / 9,  # +100°       (index 12)
+    -5 * math.pi / 9,  # -100°       (index 13)
+    2 * math.pi / 3,  # +120°       (index 14)
+    -2 * math.pi / 3,  # -120°       (index 15)
+    7 * math.pi / 9,  # +140°       (index 16)
+    -7 * math.pi / 9,  # -140°       (index 17)
+    8 * math.pi / 9,  # +160°       (index 18)
+    -8 * math.pi / 9,  # -160°       (index 19)
+    math.pi,  # 180° back   (index 20)
 )
 
-# Per-whisker half-angles.  A body node is inside cone wi when its alignment
-# dot-product with the ray direction exceeds _WHISKER_COS_HALF[wi].
-# Front 6: π/18 (10°) — 20° total cone.  Rear 4: π/6 (30°) — 60° total cone.
-_WHISKER_HALF_ANGLES: tuple = (
-    math.pi / 18,  # +10°
-    math.pi / 18,  # -10°
-    math.pi / 18,  # +30°
-    math.pi / 18,  # -30°
-    math.pi / 18,  # +50°
-    math.pi / 18,  # -50°
-    math.pi / 6,  # +90°
-    math.pi / 6,  # -90°
-    math.pi / 6,  # +150°
-    math.pi / 6,  # -150°
-)
+# Per-whisker half-angles: all π/18 (10°) — uniform 20° total cone width.
+_WHISKER_HALF_ANGLES: tuple = tuple(math.pi / 18 for _ in _WHISKER_OFFSETS)
 _WHISKER_COS_HALF: tuple = tuple(math.cos(h) for h in _WHISKER_HALF_ANGLES)
 
 # Maximum great-circle distance used to normalise whisker and pellet readings.
@@ -68,7 +63,7 @@ def compute_obs(
     direction: float,
 ) -> np.ndarray:
     """
-    Return the 16-element float32 observation vector.
+    Return the 25-element float32 observation vector.
 
     Parameters
     ----------
@@ -77,7 +72,7 @@ def compute_obs(
     pellet     : (3,) float64 — unit-sphere food position.
     direction  : float — current heading angle (radians).
     """
-    obs = np.empty(17, dtype=np.float32)
+    obs = np.empty(25, dtype=np.float32)
 
     head = snake[0]
     cos_d = math.cos(direction)
@@ -114,7 +109,7 @@ def compute_obs(
     obs[2] = math.acos(max(-1.0, min(1.0, dot_hp))) / _MAX_DIST
 
     # ------------------------------------------------------------------
-    # Indices 3-11 : whiskers
+    # Indices 3-20 : whiskers
     # ------------------------------------------------------------------
     n_nodes = len(snake)
 
@@ -122,10 +117,10 @@ def compute_obs(
         alpha = direction + offset
         ray_x = -math.cos(alpha)
         ray_y = -math.sin(alpha)
-
+        half_angle = _WHISKER_HALF_ANGLES[wi]
         min_arc = _MAX_DIST
 
-        for j in range(1, n_nodes):
+        for j in range(2, n_nodes):
             # Tangent-plane projection at (0,0,-1) is just the xy components.
             bx = float(snake[j, 0])
             by = float(snake[j, 1])
@@ -137,32 +132,51 @@ def compute_obs(
 
             # Cosine of angle between node's projected direction and ray.
             cos_lat = (bx * ray_x + by * ray_y) / n2d
-            if cos_lat < _WHISKER_COS_HALF[wi]:
-                continue  # node is outside this whisker's cone
 
-            # Great-circle arc distance: dot(b, head) = -bz for head=(0,0,-1).
-            # Subtract 2*NODE_ANGLE to convert center-to-center distance to
-            # surface-to-surface gap (0 = bodies touching, i.e. actual collision).
-            arc = max(0.0, math.acos(max(-1.0, min(1.0, -bz))) - 2.0 * NODE_ANGLE)
+            # Dynamic apparent-width cone expansion: at close range a segment's
+            # angular half-size asin(sin(NODE_ANGLE)/sin(d)) >> NODE_ANGLE, so
+            # a fixed threshold misses segments whose center is just outside the
+            # nominal cone while their body fully blocks the path.
+            arc_to_center = math.acos(max(-1.0, min(1.0, -bz)))
+
+            # Apparent-width expansion: only within the near hemisphere (arc ≤ π/2).
+            # Beyond that, a segment cannot physically overlap a cone edge any more
+            # than at nominal size, and the formula diverges near the antipodal point.
+            if arc_to_center <= math.pi / 2:
+                sin_arc = math.sin(arc_to_center)
+                if sin_arc < _SIN_NODE_ANGLE:
+                    cos_effective = -1.0  # segment on the head: hits all cones
+                else:
+                    apparent_hw = math.asin(_SIN_NODE_ANGLE / sin_arc)
+                    cos_effective = math.cos(half_angle + apparent_hw)
+            else:
+                cos_effective = math.cos(half_angle)  # original nominal threshold
+
+            if cos_lat < cos_effective:
+                continue  # segment body does not reach into this whisker's cone
+
+            # Projected arc: arc_to_center * cos_lat gives forward-direction
+            # clearance; subtract 2*NODE_ANGLE for surface-to-surface gap.
+            arc = max(0.0, arc_to_center * cos_lat - 2.0 * NODE_ANGLE)
             if arc < min_arc:
                 min_arc = arc
 
         obs[3 + wi] = float(1.0 - min_arc / _MAX_DIST)
 
     # ------------------------------------------------------------------
-    # Index 13 : head z coordinate
+    # Index 21 : head z coordinate
     # ------------------------------------------------------------------
-    obs[13] = float(head[2])
+    obs[21] = float(head[2])
 
     # ------------------------------------------------------------------
-    # Indices 14-15 : sin/cos of direction
+    # Indices 22-23 : sin/cos of direction
     # ------------------------------------------------------------------
-    obs[14] = float(sin_d)
-    obs[15] = float(cos_d)
+    obs[22] = float(sin_d)
+    obs[23] = float(cos_d)
 
     # ------------------------------------------------------------------
-    # Index 16 : snake length normalised
+    # Index 24 : snake length normalised
     # ------------------------------------------------------------------
-    obs[16] = float(n_nodes / 50.0)
+    obs[24] = float(n_nodes / 50.0)
 
     return obs

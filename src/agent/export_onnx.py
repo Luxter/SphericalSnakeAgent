@@ -31,7 +31,7 @@ class _Actor(nn.Module):
         self.policy_net = policy.mlp_extractor.policy_net
         self.action_net = policy.action_net
 
-    def forward(self, obs: torch.Tensor) -> torch.Tensor:  # (B, 17) → (B, 3)
+    def forward(self, obs: torch.Tensor) -> torch.Tensor:  # (B, 25) → (B, 3)
         latent = self.policy_net(obs)
         logits = self.action_net(latent)
         return torch.softmax(logits, dim=-1)
@@ -53,7 +53,7 @@ def main(
     actor.eval()
 
     out_path = str(Path(model_path).with_suffix(".onnx"))
-    dummy = torch.zeros(1, 17, dtype=torch.float32)
+    dummy = torch.zeros(1, 25, dtype=torch.float32)
 
     batch = torch.export.Dim("batch", min=1, max=1024)
     torch.onnx.export(

@@ -15,37 +15,35 @@
 // ---------------------------------------------------------------------------
 // Constants — must match features.py exactly
 // ---------------------------------------------------------------------------
-// Front 6 (indices 0-5): ±10°, ±30°, ±50° — narrow 20° cones, high forward resolution.
-// Rear  4 (indices 6-9): ±90°, ±150°       — wide  60° cones, coarse background awareness.
-// Tiling: front covers ±60°; ±90° covers 60°→120°; ±150° covers 120°→180°. Perfect 360°.
+// 18 whiskers at 20° spacing, uniform 20° cones (10° half-angle each).
+// One exactly at 0° (front) and one at 180° (back); symmetric ± pairs in between.
+// Coverage: 18 × 20° = 360° with zero gaps and zero overlaps.
 const _WHISKER_OFFSETS = [
-     Math.PI / 18,        // +10°
-    -Math.PI / 18,        // -10°
-     Math.PI / 6,         // +30°
-    -Math.PI / 6,         // -30°
-     5 * Math.PI / 18,    // +50°
-    -5 * Math.PI / 18,    // -50°
-     Math.PI / 2,         // +90°
-    -Math.PI / 2,         // -90°
-     5 * Math.PI / 6,     // +150°
-    -5 * Math.PI / 6,     // -150°
+     0,                    //   0° front
+     Math.PI / 9,          // +20°
+    -Math.PI / 9,          // -20°
+     2 * Math.PI / 9,      // +40°
+    -2 * Math.PI / 9,      // -40°
+     Math.PI / 3,          // +60°
+    -Math.PI / 3,          // -60°
+     4 * Math.PI / 9,      // +80°
+    -4 * Math.PI / 9,      // -80°
+     5 * Math.PI / 9,      // +100°
+    -5 * Math.PI / 9,      // -100°
+     2 * Math.PI / 3,      // +120°
+    -2 * Math.PI / 3,      // -120°
+     7 * Math.PI / 9,      // +140°
+    -7 * Math.PI / 9,      // -140°
+     8 * Math.PI / 9,      // +160°
+    -8 * Math.PI / 9,      // -160°
+     Math.PI,              // 180° back
 ];
-// Per-whisker half-angles (radians) and pre-computed cosines for cone tests.
-// Front 6: π/18 (10°) — 20° total.  Rear 4: π/6 (30°) — 60° total.
+// All whiskers use the same 10° half-angle — uniform 20° total cone.
 // NODE_ANGLE is declared in snake.js (var NODE_ANGLE = Math.PI / 60).
-const _WHISKER_HALF_ANGLES = [
-    Math.PI / 18,  // +10°
-    Math.PI / 18,  // -10°
-    Math.PI / 18,  // +30°
-    Math.PI / 18,  // -30°
-    Math.PI / 18,  // +50°
-    Math.PI / 18,  // -50°
-    Math.PI / 6,   // +90°
-    Math.PI / 6,   // -90°
-    Math.PI / 6,   // +150°
-    Math.PI / 6,   // -150°
-];
+const _WHISKER_HALF_ANGLES = _WHISKER_OFFSETS.map(() => Math.PI / 18);
 const _WHISKER_COS_HALF = _WHISKER_HALF_ANGLES.map(h => Math.cos(h));
+// NOTE: NODE_ANGLE is declared in snake.js — must be loaded before agent.js.
+const _SIN_NODE_ANGLE = Math.sin(NODE_ANGLE);  // apparent-width cone expansion
 const _MAX_DIST = Math.PI;
 
 // ---------------------------------------------------------------------------
@@ -56,7 +54,7 @@ const _MAX_DIST = Math.PI;
 // dir     : game's `direction` (radians)
 // ---------------------------------------------------------------------------
 function _computeObs(snake, pellet, dir) {
-    const obs = new Float32Array(17);
+    const obs = new Float32Array(25);
 
     const cosD = Math.cos(dir);
     const sinD = Math.sin(dir);
@@ -84,35 +82,60 @@ function _computeObs(snake, pellet, dir) {
     // --- indices 3-10 : whiskers ---
     const nNodes = snake.length;
     for (let wi = 0; wi < _WHISKER_OFFSETS.length; wi++) {
-        const alpha   = dir + _WHISKER_OFFSETS[wi];
-        const rayX    = -Math.cos(alpha);
-        const rayY    = -Math.sin(alpha);
-        const cosHalf = _WHISKER_COS_HALF[wi];
-        let minArc    = _MAX_DIST;
+        const alpha     = dir + _WHISKER_OFFSETS[wi];
+        const rayX      = -Math.cos(alpha);
+        const rayY      = -Math.sin(alpha);
+        const halfAngle = _WHISKER_HALF_ANGLES[wi];
+        let minArc      = _MAX_DIST;
 
-        for (let j = 1; j < nNodes; j++) {
+        for (let j = 2; j < nNodes; j++) {
             const bx = snake[j].x, by = snake[j].y, bz = snake[j].z;
             const n2d = Math.sqrt(bx * bx + by * by);
             if (n2d < 1e-9) continue;
-            if ((bx * rayX + by * rayY) / n2d < cosHalf) continue;
-            // Subtract 2*NODE_ANGLE to get surface-to-surface gap instead of
-            // center-to-center distance (0 = bodies touching = actual collision).
-            const arc = Math.max(0.0, Math.acos(Math.max(-1.0, Math.min(1.0, -bz))) - 2 * NODE_ANGLE);
+
+            const cosLat = (bx * rayX + by * rayY) / n2d;
+
+            // Dynamic apparent-width cone expansion: at close range a segment's
+            // angular half-size asin(sin(NODE_ANGLE)/sin(d)) >> NODE_ANGLE, so
+            // a fixed threshold misses segments whose center is just outside the
+            // nominal cone while their body fully blocks the path.
+            const arcToCenter = Math.acos(Math.max(-1.0, Math.min(1.0, -bz)));
+
+            // Apparent-width expansion: only within the near hemisphere (arc <= PI/2).
+            // Beyond that, a segment cannot physically overlap a cone edge any more
+            // than at nominal size, and the formula diverges near the antipodal point.
+            let cosEffective;
+            if (arcToCenter <= Math.PI / 2) {
+                const sinArc = Math.sin(arcToCenter);
+                if (sinArc < _SIN_NODE_ANGLE) {
+                    cosEffective = -1.0;  // segment on the head: hits all cones
+                } else {
+                    const apparentHw = Math.asin(_SIN_NODE_ANGLE / sinArc);
+                    cosEffective = Math.cos(halfAngle + apparentHw);
+                }
+            } else {
+                cosEffective = Math.cos(halfAngle);  // original nominal threshold
+            }
+            if (cosLat < cosEffective) continue;  // body does not reach into cone
+
+            // Projected arc: arcToCenter * cosLat gives forward-direction
+            // clearance; subtract 2*NODE_ANGLE for surface-to-surface gap.
+            const arc = Math.max(0.0, arcToCenter * cosLat - 2 * NODE_ANGLE);
             if (arc < minArc) minArc = arc;
         }
 
         obs[3 + wi] = 1.0 - minArc / _MAX_DIST;
     }
 
-    // --- index 13 : head z (invariantly -1 under world-rotation scheme) ---
-    obs[13] = snake[0].z;
+    // --- index 21 : head z (invariantly -1 under world-rotation scheme) ---
+    obs[21] = snake[0].z;
 
-    // --- indices 14-15 : sin/cos of direction ---
-    obs[14] = sinD;
-    obs[15] = cosD;
+    // --- indices 22-23 : sin/cos of direction ---
+    obs[22] = sinD;
+    obs[23] = cosD;
 
-    // --- index 16 : snake length normalised ---
-    obs[16] = nNodes / 50.0;
+    // --- index 24 : snake length normalised ---
+    obs[24] = nNodes / 50.0;
 
     return obs;
 }
