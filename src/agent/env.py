@@ -263,32 +263,28 @@ class SphericalSnakeEnv(gym.Env):
         """
         Mirrors JS applySnakeRotation().
 
-        For each node i (0 → N-1):
-          1. Save old_position = snake[i].
-          2. Read tail = pos_queues[i, -1]  (oldest entry; becomes next node's teleport target).
-          3. Move node: head rotates; body teleports to predecessor's tail.
-          4. Right-shift queue: pos_queues[i, 1:] ← pos_queues[i, :-1].
-          5. pos_queues[i, 0] ← old_position.
+        Head node rotates; each body node teleports to the tail of its
+        predecessor's position queue. All queues right-shift and receive
+        the node's pre-rotation position at the front.
         """
-        prev_tail = None  # tail of the previous node's queue → teleport target for next body node
+        # Save originals needed after pos_queues is right-shifted.
+        old_head = self.snake[0].copy()  # pushed to pos_queues[0, 0]
+        old_body = self.snake[1:].copy()  # pushed to pos_queues[1:, 0]; shape (N-1, 3)
 
-        for i in range(len(self.snake)):
-            old_position = self.snake[i].copy()
-            this_tail = self.pos_queues[i, -1].copy()  # feeds node i+1
+        # Rotate head in place (three in-place rotations on the (3,) slice).
+        rotate_z(-self.direction, self.snake[0])
+        rotate_y(SNAKE_VELOCITY, self.snake[0])
+        rotate_z(self.direction, self.snake[0])
 
-            if i == 0:
-                pt = self.snake[i].copy()
-                rotate_z(-self.direction, pt)
-                rotate_y(SNAKE_VELOCITY, pt)
-                rotate_z(self.direction, pt)
-                self.snake[i] = pt
-            else:
-                self.snake[i] = prev_tail
+        # Teleport each body node to pos_queues[i-1, -1] (read before right-shift).
+        self.snake[1:] = self.pos_queues[:-1, -1]
 
-            # Right-shift queue and push old position to front.
-            self.pos_queues[i, 1:] = self.pos_queues[i, :-1].copy()
-            self.pos_queues[i, 0] = old_position
-            prev_tail = this_tail
+        # Right-shift all queues simultaneously (oldest entry at slot 8 drops off).
+        self.pos_queues[:, 1:] = self.pos_queues[:, :-1].copy()
+
+        # Push pre-rotation positions to the queue front.
+        self.pos_queues[0, 0] = old_head
+        self.pos_queues[1:, 0] = old_body
 
     def _world_rotation(self) -> None:
         """
