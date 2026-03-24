@@ -84,9 +84,12 @@ class SphericalSnakeEnv(gym.Env):
         self.curriculum_length: int = curriculum_length
 
         # State (initialised properly in reset())
-        # snake mirrors JS: shape (N, 3) of node positions; pos_queues[i] mirrors snake[i].posQueue
+        # snake: (N, 3) node positions; snake[0] is the head.
+        # pos_queues: (N, NODE_QUEUE_SIZE, 3) contiguous history buffer.
+        #   pos_queues[i, 0] = most-recent saved position of node i.
+        #   pos_queues[i, -1] = oldest saved position → fed to node i+1 as teleport target.
         self.snake: np.ndarray = np.zeros((INITIAL_SNAKE_LENGTH, 3), dtype=np.float64)
-        self.pos_queues: list[list] = []  # pos_queues[i] = NODE_QUEUE_SIZE history entries for snake[i]
+        self.pos_queues: np.ndarray = np.empty((0, NODE_QUEUE_SIZE, 3), dtype=np.float64)
         self.pellet: np.ndarray = np.zeros(3, dtype=np.float64)
         self.direction: float = STARTING_DIRECTION
         self.score: int = 0
@@ -122,7 +125,7 @@ class SphericalSnakeEnv(gym.Env):
 
         # Build initial snake (8 nodes) — mirrors JS init() calling addSnakeNode() × 8
         self.snake = np.empty((0, 3), dtype=np.float64)
-        self.pos_queues = []
+        self.pos_queues = np.empty((0, NODE_QUEUE_SIZE, 3), dtype=np.float64)
         for _ in range(INITIAL_SNAKE_LENGTH):
             self._add_snake_node()
 
@@ -229,55 +232,49 @@ class SphericalSnakeEnv(gym.Env):
         """
         Append a new tail node to self.snake, mirroring JS addSnakeNode().
 
-        The new node's posQueue is initialised to [None]*NODE_QUEUE_SIZE.
-        Its starting position is:
-          • (0, 0, -1) if this is the very first node (south pole).
-          • self.pos_queues[-1][-1] if that queue entry is not None
-            (the preceding tail's oldest position history entry).
-          • Otherwise the fallback: rotate the current tail position
-            backward one step using STARTING_DIRECTION (matches JS behaviour
-            during the first NODE_QUEUE_SIZE ticks of a node's life).
+        Position: (0, 0, -1) for the first node; otherwise taken from
+        pos_queues[-1, -1] (the oldest queue slot of the current tail).
 
-        Modifies self.snake (extended by one row) and self.pos_queues in place.
+        The new node's queue is pre-filled with a fallback position: the new
+        node's position rotated one step "behind" using STARTING_DIRECTION.
+        This exactly replicates the JS null-entry path: _apply_snake_rotation
+        will place the node-after-this-one at pos_queues[-1, -1] = fallback,
+        which is identical to what the original None-branch computes.
         """
-        queue: list = [None] * NODE_QUEUE_SIZE
-
         if len(self.snake) == 0:
-            # First node: south pole — matches JS addSnakeNode() default {x:0, y:0, z:-1}
             pos = np.array([0.0, 0.0, -1.0], dtype=np.float64)
         else:
-            last_pos = self.snake[-1].copy()
-            last_queue_tail = self.pos_queues[-1][NODE_QUEUE_SIZE - 1]
-
-            if last_queue_tail is None:
-                # Fallback — mirrors JS: rotate "behind" last node
-                pos = last_pos.copy()
-                rotate_z(-STARTING_DIRECTION, pos)
-                rotate_y(-NODE_ANGLE * 2.0, pos)
-                rotate_z(STARTING_DIRECTION, pos)
-            else:
-                pos = last_queue_tail.copy()
+            # pos_queues[-1, -1] is always a valid float64: pre-filled or real history.
+            pos = self.pos_queues[-1, NODE_QUEUE_SIZE - 1].copy()
 
         self.snake = pos[np.newaxis, :] if len(self.snake) == 0 else np.vstack([self.snake, pos[np.newaxis, :]])
-        self.pos_queues.append(queue)
+
+        # Pre-fill this node's queue with the one-step-behind fallback position.
+        # Mirrors the JS null-entry fallback used during the first NODE_QUEUE_SIZE ticks.
+        fallback = pos.copy()
+        rotate_z(-STARTING_DIRECTION, fallback)
+        rotate_y(-NODE_ANGLE * 2.0, fallback)
+        rotate_z(STARTING_DIRECTION, fallback)
+        # Broadcast fallback across all NODE_QUEUE_SIZE slots → shape (1, 9, 3)
+        new_row = np.broadcast_to(fallback, (NODE_QUEUE_SIZE, 3)).copy()[np.newaxis]
+        self.pos_queues = np.concatenate([self.pos_queues, new_row], axis=0)
 
     def _apply_snake_rotation(self) -> None:
         """
-        Mirrors JS applySnakeRotation() exactly.
+        Mirrors JS applySnakeRotation().
 
         For each node i (0 → N-1):
-          1. Save old_position = copy of current snake[i]
-          2. Move node:
-             - i == 0 (head):           rotateZ(-dir) → rotateY(+vel) → rotateZ(+dir)
-             - i > 0, next_pos is None: rotateZ(-STARTING_DIR) → rotateY(+vel) → rotateZ(+STARTING_DIR)
-             - i > 0, next_pos is set:  teleport to next_pos
-          3. posQueue.unshift(old_position)   [prepend]
-          4. next_pos = posQueue.pop()        [pop from back — oldest entry]
+          1. Save old_position = snake[i].
+          2. Read tail = pos_queues[i, -1]  (oldest entry; becomes next node's teleport target).
+          3. Move node: head rotates; body teleports to predecessor's tail.
+          4. Right-shift queue: pos_queues[i, 1:] ← pos_queues[i, :-1].
+          5. pos_queues[i, 0] ← old_position.
         """
-        next_position = None
+        prev_tail = None  # tail of the previous node's queue → teleport target for next body node
 
         for i in range(len(self.snake)):
             old_position = self.snake[i].copy()
+            this_tail = self.pos_queues[i, -1].copy()  # feeds node i+1
 
             if i == 0:
                 pt = self.snake[i].copy()
@@ -285,25 +282,18 @@ class SphericalSnakeEnv(gym.Env):
                 rotate_y(SNAKE_VELOCITY, pt)
                 rotate_z(self.direction, pt)
                 self.snake[i] = pt
-            elif next_position is None:
-                # Body node whose predecessor has no history yet — use fallback
-                pt = self.snake[i].copy()
-                rotate_z(-STARTING_DIRECTION, pt)
-                rotate_y(SNAKE_VELOCITY, pt)
-                rotate_z(STARTING_DIRECTION, pt)
-                self.snake[i] = pt
             else:
-                self.snake[i] = next_position
+                self.snake[i] = prev_tail
 
-            # posQueue.unshift(old) → insert at index 0
-            self.pos_queues[i].insert(0, old_position)
-            # posQueue.pop() → remove last element; feeds next node
-            next_position = self.pos_queues[i].pop()
+            # Right-shift queue and push old position to front.
+            self.pos_queues[i, 1:] = self.pos_queues[i, :-1].copy()
+            self.pos_queues[i, 0] = old_position
+            prev_tail = this_tail
 
     def _world_rotation(self) -> None:
         """
         World rotation that mirrors JS: rotateZ(-d) → rotateY(-v) → rotateZ(+d)
-        applied to ALL points: pellet, every snake node, every non-None posQueue entry.
+        applied to ALL points: pellet, every snake node, every posQueue entry.
         Grid points (points[] in JS) are rendering-only and excluded here.
         """
         d = self.direction
@@ -317,12 +307,10 @@ class SphericalSnakeEnv(gym.Env):
         rotate_y(-v, self.snake)
         rotate_z(d, self.snake)
 
-        for queue in self.pos_queues:
-            for j in range(len(queue)):
-                if queue[j] is not None:
-                    rotate_z(-d, queue[j])
-                    rotate_y(-v, queue[j])
-                    rotate_z(d, queue[j])
+        flat = self.pos_queues.reshape(-1, 3)  # view: (N*9, 3)
+        rotate_z(-d, flat)
+        rotate_y(-v, flat)
+        rotate_z(d, flat)
 
     def _check_collisions(self) -> tuple[bool, bool]:
         """

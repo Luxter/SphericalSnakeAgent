@@ -38,6 +38,7 @@ from agent.env import (
 # Deterministic LCG — identical to snake_trace.js
 # ---------------------------------------------------------------------------
 
+
 class LCG:
     def __init__(self, seed: int) -> None:
         self.state = int(seed) & 0xFFFFFFFF
@@ -51,6 +52,7 @@ class LCG:
 # LCG-seeded subclass of SphericalSnakeEnv
 # Overrides only _regenerate_pellet() to use the LCG.
 # ---------------------------------------------------------------------------
+
 
 class TracingEnv(SphericalSnakeEnv):
     def __init__(self, lcg: LCG) -> None:
@@ -83,7 +85,7 @@ def lcg_init(env: TracingEnv) -> None:
     env.pellet = env._regenerate_pellet()
 
     env.snake = np.empty((0, 3), dtype=np.float64)
-    env.pos_queues = []
+    env.pos_queues = np.empty((0, NODE_QUEUE_SIZE, 3), dtype=np.float64)
     for _ in range(INITIAL_SNAKE_LENGTH):
         env._add_snake_node()
 
@@ -92,12 +94,14 @@ def lcg_init(env: TracingEnv) -> None:
 # Snapshot helper — mirrors snake_trace.js snapshot()
 # ---------------------------------------------------------------------------
 
+
 def snapshot(env: TracingEnv, tick: int) -> dict:
     head = env.snake[0]
-    pq0 = [
-        {"x": float(p[0]), "y": float(p[1]), "z": float(p[2])} if p is not None else None
-        for p in env.pos_queues[0]
-    ]
+    # pos_queues[0] is now a (NODE_QUEUE_SIZE, 3) ndarray — all entries are real floats.
+    # JS has null for unfilled slots (first 9 ticks); we output the pre-filled fallback
+    # values instead.  compare_traces.py skips JS-side nulls, so these extra entries
+    # are flagged as "MISSING in JS" for ticks 0-8 only.
+    pq0 = [{"x": float(p[0]), "y": float(p[1]), "z": float(p[2])} for p in env.pos_queues[0]]
     return {
         "tick": tick,
         "direction": float(env.direction),
@@ -115,6 +119,7 @@ def snapshot(env: TracingEnv, tick: int) -> dict:
 # ---------------------------------------------------------------------------
 # CLI harness
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
