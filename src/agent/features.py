@@ -56,6 +56,15 @@ _WHISKER_COS_HALF: tuple = tuple(math.cos(h) for h in _WHISKER_HALF_ANGLES)
 # Maximum great-circle distance used to normalise whisker and pellet readings.
 _MAX_DIST: float = math.pi
 
+# All 18 whiskers share the same half-angle (π/18), so cos_effective depends
+# only on the body node, not the whisker index.
+_HALF_ANGLE: float = math.pi / 18
+_COS_HALF_ANGLE: float = math.cos(_HALF_ANGLE)
+_SIN_HALF_ANGLE: float = math.sin(_HALF_ANGLE)
+_TWO_NODE_ANGLE: float = 2.0 * NODE_ANGLE
+# Whisker offsets as a float64 ndarray for broadcasting: shape (18,).
+_OFFSETS_ARR: np.ndarray = np.array(_WHISKER_OFFSETS, dtype=np.float64)
+
 
 def compute_obs(
     snake: np.ndarray,
@@ -110,58 +119,64 @@ def compute_obs(
 
     # ------------------------------------------------------------------
     # Indices 3-20 : whiskers
+    #
+    # For each body node, compute the great-circle arc to its center and
+    # the effective cone threshold that accounts for apparent angular width
+    # at close range.  Then broadcast 18 ray directions against all M body
+    # nodes to test hit/miss and find the nearest hit per whisker.
+    #
+    # cos_effective uses the identity cos(h + asin(t)) = cos(h)√(1-t²) − sin(h)·t
+    # (where t = SIN_NODE_ANGLE/sin_arc) to avoid calling asin and cos per node.
+    # sin(arc_to_center) = √(1-bz²) avoids a sin() call.
+    # arc_to_center ≤ π/2 ⟺ bz ≤ 0, avoiding an acos() call for the hemisphere test.
     # ------------------------------------------------------------------
     n_nodes = len(snake)
+    n_body = n_nodes - 2
 
-    for wi, offset in enumerate(_WHISKER_OFFSETS):
-        alpha = direction + offset
-        ray_x = -math.cos(alpha)
-        ray_y = -math.sin(alpha)
-        half_angle = _WHISKER_HALF_ANGLES[wi]
-        min_arc = _MAX_DIST
+    if n_body > 0:
+        body = snake[2:]  # (M, 3)
+        bx = body[:, 0]  # (M,)
+        by = body[:, 1]  # (M,)
+        bz = body[:, 2]  # (M,)
 
-        for j in range(2, n_nodes):
-            # Tangent-plane projection at (0,0,-1) is just the xy components.
-            bx = float(snake[j, 0])
-            by = float(snake[j, 1])
-            bz = float(snake[j, 2])
+        n2d = np.sqrt(bx * bx + by * by)  # (M,) — projected XY length
+        valid_n2d = n2d >= 1e-9  # (M,) — False for nodes at the south pole
 
-            n2d = math.sqrt(bx * bx + by * by)
-            if n2d < 1e-9:
-                continue  # node is at the south pole (on top of head)
+        arc = np.arccos(np.clip(-bz, -1.0, 1.0))  # (M,) — great-circle distance to each node
+        sin_arc = np.sqrt(np.maximum(0.0, 1.0 - bz * bz))  # (M,) — sin(arc), via identity
 
-            # Cosine of angle between node's projected direction and ray.
-            cos_lat = (bx * ray_x + by * ray_y) / n2d
+        near = bz <= 0.0  # (M,) — node in near hemisphere (arc ≤ π/2)
+        too_small = sin_arc < _SIN_NODE_ANGLE  # (M,) — node so close it subtends the full sphere
 
-            # Dynamic apparent-width cone expansion: at close range a segment's
-            # angular half-size asin(sin(NODE_ANGLE)/sin(d)) >> NODE_ANGLE, so
-            # a fixed threshold misses segments whose center is just outside the
-            # nominal cone while their body fully blocks the path.
-            arc_to_center = math.acos(max(-1.0, min(1.0, -bz)))
+        # Apparent-width threshold: cos(half_angle + apparent_half_width).
+        # Guard denominator for nodes where sin_arc < SIN_NODE_ANGLE (handled by too_small).
+        sin_arc_safe = np.where(sin_arc > _SIN_NODE_ANGLE, sin_arc, 1.0)
+        t = _SIN_NODE_ANGLE / sin_arc_safe
+        cos_eff_near = _COS_HALF_ANGLE * np.sqrt(np.maximum(0.0, 1.0 - t * t)) - _SIN_HALF_ANGLE * t
+        cos_eff_near = np.where(too_small, -1.0, cos_eff_near)  # -1 means hits every cone
+        cos_effective = np.where(near, cos_eff_near, _COS_HALF_ANGLE)  # (M,)
 
-            # Apparent-width expansion: only within the near hemisphere (arc ≤ π/2).
-            # Beyond that, a segment cannot physically overlap a cone edge any more
-            # than at nominal size, and the formula diverges near the antipodal point.
-            if arc_to_center <= math.pi / 2:
-                sin_arc = math.sin(arc_to_center)
-                if sin_arc < _SIN_NODE_ANGLE:
-                    cos_effective = -1.0  # segment on the head: hits all cones
-                else:
-                    apparent_hw = math.asin(_SIN_NODE_ANGLE / sin_arc)
-                    cos_effective = math.cos(half_angle + apparent_hw)
-            else:
-                cos_effective = math.cos(half_angle)  # original nominal threshold
+        # 18 ray directions from the current heading.
+        alphas = direction + _OFFSETS_ARR  # (18,)
+        ray_x = -np.cos(alphas)  # (18,)
+        ray_y = -np.sin(alphas)  # (18,)
 
-            if cos_lat < cos_effective:
-                continue  # segment body does not reach into this whisker's cone
+        # cos_lat[wi, j]: cosine between whisker wi's ray and the XY direction of node j.
+        n2d_safe = np.where(valid_n2d, n2d, 1.0)
+        cos_lat = (bx * ray_x[:, np.newaxis] + by * ray_y[:, np.newaxis]) / n2d_safe  # (18, M)
 
-            # Projected arc: arc_to_center * cos_lat gives forward-direction
-            # clearance; subtract 2*NODE_ANGLE for surface-to-surface gap.
-            arc = max(0.0, arc_to_center * cos_lat - 2.0 * NODE_ANGLE)
-            if arc < min_arc:
-                min_arc = arc
+        # Surface-to-surface arc clearance for each (whisker, node) pair.
+        arc_vals = np.maximum(0.0, arc * cos_lat - _TWO_NODE_ANGLE)  # (18, M)
 
-        obs[3 + wi] = float(1.0 - min_arc / _MAX_DIST)
+        # A node hits a whisker if its projected direction is inside the cone and it is valid.
+        hits = (cos_lat >= cos_effective) & valid_n2d  # (18, M)
+
+        # Nearest hit per whisker; _MAX_DIST is the sentinel for no-hit.
+        min_arcs = np.where(hits, arc_vals, _MAX_DIST).min(axis=1)  # (18,)
+    else:
+        min_arcs = np.full(18, _MAX_DIST, dtype=np.float64)
+
+    obs[3:21] = (1.0 - min_arcs / _MAX_DIST).astype(np.float32)
 
     # ------------------------------------------------------------------
     # Index 21 : head z coordinate
