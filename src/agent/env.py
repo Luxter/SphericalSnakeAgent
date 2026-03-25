@@ -20,6 +20,7 @@ INITIAL_SNAKE_LENGTH: int = 8
 # a few dozen steps from the head (which is always at the south pole).
 _NEAR_PELLET_MIN_ARC: float = COLLISION_DISTANCE + 0.01  # ~0.115 rad
 _NEAR_PELLET_MAX_ARC: float = 0.35  # ~20° arc radius
+_COLLISION_DIST_SQ: float = COLLISION_DISTANCE**2
 
 
 def rotate_z(a: float, pts: np.ndarray) -> None:
@@ -326,15 +327,17 @@ class SphericalSnakeEnv(gym.Env):
         """
         head = self.snake[0]
 
-        # Self-collision check first (mirrors JS early-return on showEnd())
-        for i in range(2, len(self.snake)):
-            diff = head - self.snake[i]
-            if math.sqrt(float(np.dot(diff, diff))) < COLLISION_DISTANCE:
+        # Self-collision: compare squared chord distances to avoid sqrt.
+        # snake[1] is always adjacent and cannot collide; test snake[2:].
+        if len(self.snake) > 2:
+            diffs = self.snake[2:] - head  # (N-2, 3)
+            sq_dists = np.einsum("ij,ij->i", diffs, diffs)  # (N-2,)
+            if bool(np.any(sq_dists < _COLLISION_DIST_SQ)):
                 return False, True
 
-        # Pellet collision
+        # Pellet collision (squared distance, no sqrt)
         diff = head - self.pellet
-        eaten = math.sqrt(float(np.dot(diff, diff))) < COLLISION_DISTANCE
+        eaten = float(np.dot(diff, diff)) < _COLLISION_DIST_SQ
         if eaten:
             self.score += 1
             if self.curriculum_length > 0 and self.score < self.curriculum_length:
