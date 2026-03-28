@@ -15,11 +15,9 @@ TURN_RATE: float = 0.08
 INITIAL_SNAKE_LENGTH: int = 8
 
 # Curriculum learning: arc-distance bounds for near-pellet placement.
-# The minimum is slightly above the collision threshold so the pellet is
-# not eaten on the very next tick; the maximum keeps it reachable within
-# a few dozen steps from the head (which is always at the south pole).
 _NEAR_PELLET_MIN_ARC: float = COLLISION_DISTANCE + 0.01  # ~0.115 rad
-_NEAR_PELLET_MAX_ARC: float = 0.35  # ~20° arc radius
+_NEAR_PELLET_MAX_ARC: float = 0.20
+_NEAR_PELLET_BEARING_SPREAD: float = math.pi / 6  # ±30°
 _COLLISION_DIST_SQ: float = COLLISION_DISTANCE**2
 
 
@@ -196,19 +194,43 @@ class SphericalSnakeEnv(gym.Env):
 
         Samples a point on the unit sphere that is between
         ``_NEAR_PELLET_MIN_ARC`` and ``_NEAR_PELLET_MAX_ARC`` great-circle
-        arc distance from the head.
+        arc distance from the head, and is not occluded by any body node
+        (i.e. chord distance to every body node >= COLLISION_DISTANCE).
+
+        Up to 32 candidate positions are tried; if all are occluded (only
+        possible with a very long, tightly coiled snake) the method falls
+        back to ``_regenerate_pellet()`` to guarantee termination.
+
+        The bearing is sampled within ±``_NEAR_PELLET_BEARING_SPREAD`` of the
+        snake's current forward heading so the pellet is always reachable with
+        at most a small turn.  The forward bearing from the south pole is
+        ``π + self.direction`` (derived from the rotate_z/rotate_y/rotate_z
+        head-movement convention used in ``_apply_snake_rotation``).
 
         Returns
         -------
         np.ndarray, shape (3,), dtype float64 — unit-sphere Cartesian point.
         """
-        arc = self.np_random.uniform(_NEAR_PELLET_MIN_ARC, _NEAR_PELLET_MAX_ARC)
-        bearing = self.np_random.uniform(0.0, 2.0 * math.pi)
-        sin_arc = math.sin(arc)
-        return np.array(
-            [sin_arc * math.cos(bearing), sin_arc * math.sin(bearing), -math.cos(arc)],
-            dtype=np.float64,
-        )
+        body = self.snake[1:]  # exclude head; shape (N-1, 3)
+        forward_bearing = math.pi + self.direction
+        for _ in range(32):
+            arc = self.np_random.uniform(_NEAR_PELLET_MIN_ARC, _NEAR_PELLET_MAX_ARC)
+            bearing = forward_bearing + self.np_random.uniform(
+                -_NEAR_PELLET_BEARING_SPREAD, _NEAR_PELLET_BEARING_SPREAD
+            )
+            sin_arc = math.sin(arc)
+            candidate = np.array(
+                [sin_arc * math.cos(bearing), sin_arc * math.sin(bearing), -math.cos(arc)],
+                dtype=np.float64,
+            )
+            if len(body) == 0:
+                return candidate
+            diffs = body - candidate
+            sq_dists = np.einsum("ij,ij->i", diffs, diffs)
+            if bool(np.all(sq_dists >= _COLLISION_DIST_SQ)):
+                return candidate
+        # Fallback: snake too coiled to find a clear nearby spot ahead
+        return self._regenerate_pellet()
 
     def _regenerate_pellet(self) -> np.ndarray:
         """

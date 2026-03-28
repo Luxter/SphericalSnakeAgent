@@ -22,11 +22,16 @@ Usage
     python tools/agent_trace.py --model runs/PPO_3
     # → writes runs/PPO_3/visualizations/500000.gif, 1000000.gif, ..., best.gif
 
+    # Curriculum mode — visualise what the agent saw during curriculum training:
+    python tools/agent_trace.py --model runs/PPO_23_curriculum/checkpoints/spherical_snake_5000000_steps.zip --curriculum-length 60
+    # → writes runs/PPO_23_curriculum/visualizations/5000000_curriculum60.gif
+
 Output location
 ---------------
 GIFs are always written to <run_dir>/visualizations/<name>.gif, where:
   - <run_dir>  is inferred from the model path (parent of checkpoints/ or best/)
   - <name>     is the step count for checkpoint zips, "best", or "final"
+  - when --curriculum-length > 0, "_curriculumN" is appended to the name
 
 Already-rendered GIFs are skipped.
 """
@@ -77,22 +82,30 @@ def _list_checkpoints(run_dir: Path) -> list[tuple[Path, str]]:
     return entries
 
 
-def _record_episode(model: PPO, max_steps: int) -> dict:
+def _record_episode(model: PPO, max_steps: int, curriculum_length: int = 0) -> dict:
     """
-    Run one episode.  Monkey-patches _regenerate_pellet on the unwrapped env
-    to intercept every pellet spawn in order, then restores the original.
+    Run one episode.  Monkey-patches both _regenerate_pellet and
+    _place_nearby_pellet to intercept every pellet spawn in order (including
+    curriculum near-head pellets), then restores the originals.
     """
-    env = TimeLimit(SphericalSnakeEnv(), max_episode_steps=max_steps)
+    env = TimeLimit(SphericalSnakeEnv(curriculum_length=curriculum_length), max_episode_steps=max_steps)
 
     pellets: list = []
     _orig_regen = SphericalSnakeEnv._regenerate_pellet
+    _orig_nearby = SphericalSnakeEnv._place_nearby_pellet
 
     def _recording_regen(self):
         p = _orig_regen(self)
         pellets.append([float(p[0]), float(p[1]), float(p[2])])
         return p
 
+    def _recording_nearby(self):
+        p = _orig_nearby(self)
+        pellets.append([float(p[0]), float(p[1]), float(p[2])])
+        return p
+
     SphericalSnakeEnv._regenerate_pellet = _recording_regen
+    SphericalSnakeEnv._place_nearby_pellet = _recording_nearby
     try:
         obs, _ = env.reset()
         actions: list[int] = []
@@ -103,15 +116,18 @@ def _record_episode(model: PPO, max_steps: int) -> dict:
             obs, _, terminated, truncated, info = env.step(action)
     finally:
         SphericalSnakeEnv._regenerate_pellet = _orig_regen
+        SphericalSnakeEnv._place_nearby_pellet = _orig_nearby
         env.close()
 
     return {"actions": actions, "pellets": pellets, "score": info.get("score", 0)}
 
 
-def _render(zip_path: Path, gif_path: Path, max_steps: int, frame_skip: int, fps: int) -> None:
+def _render(
+    zip_path: Path, gif_path: Path, max_steps: int, frame_skip: int, fps: int, curriculum_length: int = 0
+) -> None:
     """Record one episode from zip_path and render it to gif_path."""
     model = PPO.load(str(zip_path))
-    ep = _record_episode(model, max_steps)
+    ep = _record_episode(model, max_steps, curriculum_length)
     print(f"    score={ep['score']}, ticks={len(ep['actions'])}, pellets={len(ep['pellets'])}")
 
     trace = {"meta": {"model": str(zip_path)}, "episodes": [ep]}
@@ -147,8 +163,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Render agent GIFs from a trained model.")
     parser.add_argument("--model", required=True, help="Model .zip path or run directory.")
     parser.add_argument("--max-steps", type=int, default=10_000, help="TimeLimit per episode.")
-    parser.add_argument("--frame-skip", type=int, default=4, help="Render every Nth tick.")
-    parser.add_argument("--fps", type=int, default=20, help="GIF playback frames per second.")
+    parser.add_argument("--frame-skip", type=int, default=8, help="Render every Nth tick.")
+    parser.add_argument("--fps", type=int, default=8, help="GIF playback frames per second.")
+    parser.add_argument("--curriculum-length", type=int, default=0, help="Number of near-head pellets per episode.")
     args = parser.parse_args()
 
     model_path = Path(args.model)
@@ -165,15 +182,16 @@ def main() -> None:
         targets = [(model_path, _gif_name(model_path))]
 
     vis_dir = run_dir / "visualizations"
+    curriculum_suffix = f"_curriculum{args.curriculum_length}" if args.curriculum_length > 0 else ""
     print(f"Run: {run_dir}  \u2192  {vis_dir}/")
 
     for zip_path, gif_name in targets:
-        gif_path = vis_dir / f"{gif_name}.gif"
+        gif_path = vis_dir / f"{gif_name}{curriculum_suffix}.gif"
         if gif_path.exists():
             print(f"  Skipping (exists): {gif_path.name}")
             continue
         print(f"  {zip_path.name}")
-        _render(zip_path, gif_path, args.max_steps, args.frame_skip, args.fps)
+        _render(zip_path, gif_path, args.max_steps, args.frame_skip, args.fps, args.curriculum_length)
 
 
 if __name__ == "__main__":
