@@ -197,11 +197,11 @@ function drawWhiskers(obs) {
         ctx.lineTo(left.sx,  left.sy);
         ctx.lineTo(right.sx, right.sy);
         ctx.closePath();
-        ctx.fillStyle = `rgba(${r},${g},0,0.1)`;
+        ctx.fillStyle = `rgba(${r},${g},0,0.05)`;
         ctx.fill();
 
         // Cone edge lines.
-        ctx.strokeStyle = `rgba(${r},${g},0,0.2)`;
+        ctx.strokeStyle = `rgba(${r},${g},0,0.12)`;
         ctx.lineWidth   = 1.0;
         ctx.beginPath();
         ctx.moveTo(hx, hy);

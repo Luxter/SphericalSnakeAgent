@@ -19,7 +19,7 @@
             touch-action: none;
         }
         body {
-            background: #E1F0F5;
+            background: #05080f;
             font-family: monospace;
             touch-action: none;
             padding: 0 8px;
@@ -28,8 +28,10 @@
             font-size: 2em;
             margin: 0;
             text-align: center;
-            background: rgba(0,0,0,.8);
-            color: #FFF;
+            background: transparent;
+            color: #00ffe7;
+            text-shadow: 0 0 12px #00ffe7, 0 0 30px #00ffe788;
+            letter-spacing: 0.05em;
             padding: 10px 0px;
         }
         #container {
@@ -44,9 +46,10 @@
             font-size: 1.2em;
         }
         canvas {
-            border: 1px black solid;
+            border: 1px solid #00ffe722;
+            box-shadow: 0 0 32px #00ffe71a, inset 0 0 40px #000a;
             display: block;
-            background: #FFF;
+            background: #080d18;
             /* Scale to container width; internal resolution (358×360) is unchanged */
             width: 100%;
             height: auto;
@@ -55,7 +58,11 @@
             width: 100%;
             display: none;
             position: absolute;
-            top: calc(50% - 1.5em);
+            top: 52px;
+            /* Leave room for the viz/AI buttons stacked on the right */
+            padding-right: 160px;
+            text-align: left;
+            padding-left: 12px;
         }
         .hidden {
             display: none;
@@ -75,43 +82,43 @@
         }
 
         .button {
-            padding: 10px;
-            background: #EEE;
+            background: #0d1a2a;
             display: inline-block;
             user-select: none;
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
             border-radius: 50px;
-            border: 4px #333 solid;
+            border: 2px solid #00ffe755;
+            box-shadow: 0 0 10px #00ffe733;
             position: absolute;
             cursor: pointer;
             touch-action: manipulation;
         }
 
         #move_left {
-            width: 60px;
-            height: 60px;
+            width: 80px;
+            height: 80px;
             left: 10px;
             top: 10px;
-            background: url("icons/left.png") center / 60% no-repeat #EEE;
+            background: url("icons/left.png") center / 55% no-repeat #0d1a2a;
         }
 
         #move_right {
-            width: 60px;
-            height: 60px;
+            width: 80px;
+            height: 80px;
             right: 10px;
             top: 10px;
-            background: url("icons/right.png") center / 60% no-repeat #EEE;
+            background: url("icons/right.png") center / 55% no-repeat #0d1a2a;
         }
 
         #mobile_controls .button.down {
-            background-color: #67bfff;
+            background-color: #00ffe722;
+            box-shadow: 0 0 18px #00ffe7;
         }
 
-        /* ---- Overlay buttons (viz / AI) ---- */
         #refresh {
-            color: #0093fc;
+            color: #00ffe7;
             cursor: pointer;
             text-decoration: underline;
         }
@@ -120,36 +127,43 @@
             position: absolute;
             display: flex;
             align-items: center;
-            gap: 6px;
-            background: rgba(0,0,0,0.45);
-            border-radius: 8px;
-            padding: 5px 9px;
+            gap: 8px;
+            background: rgba(0,10,20,0.7);
+            border: 1px solid #00ffe733;
+            border-radius: 10px;
+            padding: 10px 16px;
             cursor: pointer;
             user-select: none;
             touch-action: manipulation;
+        }
+        #viz_mode_btn:hover, #ai_toggle_btn:hover {
+            border-color: #00ffe7aa;
+            box-shadow: 0 0 10px #00ffe744;
         }
         #viz_mode_btn {
             top: 52px;
             right: 4px;
         }
         #ai_toggle_btn {
-            top: 92px;
+            top: 104px;
             right: 4px;
         }
         #viz_mode_btn span, #ai_toggle_btn span {
-            color: #fff;
-            font-size: clamp(0.85em, 3vw, 1.2em);
+            color: #00ffe7;
+            font-size: clamp(1em, 3.5vw, 1.4em);
             font-family: monospace;
-            letter-spacing: 0.03em;
+            letter-spacing: 0.05em;
         }
 
         /* ---- Info area ---- */
         #info_area {
             padding: 8px 4px;
-            line-height: 1.6;
+            line-height: 1.8;
+            color: #4a8fa8;
             touch-action: auto;
         }
         #info_area a {
+            color: #00ffe7;
             touch-action: auto;
         }
 

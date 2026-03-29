@@ -9,6 +9,9 @@ var STARTING_DIRECTION = Math.PI / 4;
 
 var cnv, ctx, width, height, centerX, centerY, points, stopped, paused;
 
+// Active particle bursts spawned on pellet eat.
+var _particles = [];
+
 var clock; // Absolute time since last update.
 var accumulatedDelta = 0; // How much delta time is built up.
 
@@ -264,15 +267,47 @@ function drawPoint(point, radius, red) {
 
     // Transparent based on depth.
     var alpha = 1 - (p.z - 1) / 2;
-    // Color based on depth.
     var depthColor = 255 - Math.floor((p.z - 1) / 2 * 255);
-    ctx.fillStyle = "rgba(" + red + ", 0, " + depthColor + ", " + alpha + ")";
+    if (red === 120) {
+        // Snake: radial gradient for a glowing 3D-bead look.
+        var grd = ctx.createRadialGradient(
+            p.x - radius * 0.3, p.y - radius * 0.3, radius * 0.05,  // inner highlight (offset)
+            p.x, p.y, radius                                          // outer edge
+        );
+        grd.addColorStop(0,   "rgba(200, 255, 255, " + alpha + ")");          // bright white-cyan core
+        grd.addColorStop(0.35,"rgba(0, 230, 220, "  + alpha + ")");           // neon cyan
+        grd.addColorStop(1,   "rgba(0, 60,  80,  "  + (alpha * 0.4) + ")");  // dark teal rim
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = grd;
+        ctx.fill();
+        return;
+    } else if (red === 255) {
+        // Pellet: same gradient bead style, magenta palette.
+        var pgrd = ctx.createRadialGradient(
+            p.x - radius * 0.3, p.y - radius * 0.3, radius * 0.05,
+            p.x, p.y, radius
+        );
+        pgrd.addColorStop(0,   "rgba(255, 200, 230, " + Math.min(1, alpha + 0.3) + ")");  // bright pink-white core
+        pgrd.addColorStop(0.35,"rgba(255, 0,   120, " + Math.min(1, alpha + 0.3) + ")");  // neon magenta
+        pgrd.addColorStop(1,   "rgba(80,  0,   40,  " + (alpha * 0.4) + ")");             // dark magenta rim
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+        ctx.fillStyle = pgrd;
+        ctx.fill();
+        return;
+    } else {
+        // Sphere dots: dim cyan
+        ctx.fillStyle = "rgba(0, " + Math.round(depthColor * 0.6) + ", " + depthColor + ", " + (alpha * 0.4) + ")";
+    }
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.fill();
 }
 
 function render() {
     ctx.clearRect(0, 0, width, height);
+
+    drawParticles();
 
     // Sphere dot cloud — hidden in AI-only mode.
     if (vizMode !== "ai_only") {
@@ -290,7 +325,8 @@ function render() {
         }
     }
 
-    drawPoint(pellet, NODE_ANGLE, 0);
+    // Pellet: bright neon magenta so it's clearly distinct from the sphere dots.
+    drawPoint(pellet, NODE_ANGLE, 255);
 
     // Whisker cones — shown in AI-only and AI-overlay modes.
     // Always recompute obs so whiskers stay live even when the human plays.
@@ -301,21 +337,21 @@ function render() {
         if (_lastObs) drawWhiskers(_lastObs);
     }
 
-    // Draw angle.
+    // Draw angle — neon cyan heading indicator.
     ctx.beginPath();
     ctx.moveTo(centerX, centerY);
     var r = NODE_ANGLE / 2 * focalLength * 2.2;
     ctx.lineTo(centerX + Math.cos(direction) * r,
         centerY + Math.sin(direction) * r);
-    ctx.strokeStyle = "#FFF";
-    ctx.lineWidth = 3;
+    ctx.strokeStyle = "#00ffe7";
+    ctx.lineWidth = 2;
     ctx.stroke();
     ctx.lineWidth = 1;
 
     // Draw circle — hidden in AI-only mode.
     if (vizMode !== "ai_only") {
         ctx.beginPath();
-        ctx.strokeStyle = "rgb(0,0,0)";
+        ctx.strokeStyle = "rgba(0, 255, 231, 0.18)";
 
         // The radius value was determined experimentally.
         // TODO: figure out the math behind this.
@@ -394,14 +430,53 @@ function checkCollisions() {
          }
     }
     if (collision(snake[0], pellet)) {
+        spawnPelletBurst(pellet);
         regeneratePellet();
         addSnakeNode();
         incrementScore();
     }
 }
 
+// Spawn a ring of particles at the pellet's projected screen position.
+function spawnPelletBurst(pt) {
+    var p = copyPoint(pt);
+    p.z += 2;
+    var sx = -p.x * focalLength / p.z + centerX;
+    var sy = -p.y * focalLength / p.z + centerY;
+    var count = 18;
+    for (var i = 0; i < count; i++) {
+        var angle = (i / count) * Math.PI * 2;
+        var speed = 1.5 + Math.random() * 2.5;
+        _particles.push({
+            x: sx, y: sy,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,          // 1 = fresh, 0 = dead
+            decay: 0.025 + Math.random() * 0.02,
+            radius: 2 + Math.random() * 2
+        });
+    }
+}
+
+function drawParticles() {
+    for (var i = _particles.length - 1; i >= 0; i--) {
+        var p = _particles[i];
+        p.x  += p.vx;
+        p.y  += p.vy;
+        p.vx *= 0.92;
+        p.vy *= 0.92;
+        p.life -= p.decay;
+        if (p.life <= 0) { _particles.splice(i, 1); continue; }
+        var a = p.life;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius * p.life, 0, Math.PI * 2);
+        ctx.fillStyle = "rgba(255, " + Math.round(50 * (1 - p.life)) + ", " + Math.round(180 * p.life) + ", " + a + ")";
+        ctx.fill();
+    }
+}
+
 function showEnd() {
-    document.getElementsByTagName('body')[0].style = 'background: #E8E8E8';
+    document.getElementsByTagName('body')[0].style = 'background: #05080f';
     document.getElementById('gg').style = 'display:block';
     stopped = true;
 }
