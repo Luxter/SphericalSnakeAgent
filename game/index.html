@@ -12,8 +12,9 @@
 
 
     <style type='text/css'>
-        * {
+        *, *::before, *::after {
             margin: 0;
+            box-sizing: border-box;
             -webkit-tap-highlight-color: transparent;
             touch-action: none;
         }
@@ -21,6 +22,7 @@
             background: #E1F0F5;
             font-family: monospace;
             touch-action: none;
+            padding: 0 8px;
         }
         #score, #gg {
             font-size: 2em;
@@ -31,34 +33,43 @@
             padding: 10px 0px;
         }
         #container {
-            width: 360px;
+            /* On desktop: fill most of the viewport height (canvas is ~square).
+               On mobile:  fill the full width up to the phone edge. */
+            width: min(95vw, calc(100vh - 200px));
+            max-width: 900px;
             margin: 10px auto;
             position: relative;
         }
         #leaderboard_area {
             font-size: 1.2em;
         }
-    	canvas {
-    		border: 1px black solid;
-    		display: block;
+        canvas {
+            border: 1px black solid;
+            display: block;
             background: #FFF;
-    	}
+            /* Scale to container width; internal resolution (358×360) is unchanged */
+            width: 100%;
+            height: auto;
+        }
         #gg {
-            width: 360px;
+            width: 100%;
             display: none;
             position: absolute;
-            top: 200px;
+            top: calc(50% - 1.5em);
         }
         .hidden {
             display: none;
         }
 
+        /* ---- Mobile controls ---- */
+        /* The controls div sits after the canvas in the DOM but floats
+           back up over the bottom of the canvas via negative top margin. */
         #mobile_controls {
             position: relative;
             user-select: none;
-            -webkit-user-select: none; /* Safari, Chrome, iOS Safari */
-            -moz-user-select: none;    /* Firefox */
-            -ms-user-select: none;     /* Internet Explorer/Edge */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
             height: 10px;
             top: -100px;
         }
@@ -68,9 +79,9 @@
             background: #EEE;
             display: inline-block;
             user-select: none;
-            -webkit-user-select: none; /* Safari, Chrome, iOS Safari */
-            -moz-user-select: none;    /* Firefox */
-            -ms-user-select: none;     /* Internet Explorer/Edge */
+            -webkit-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
             border-radius: 50px;
             border: 4px #333 solid;
             position: absolute;
@@ -79,31 +90,26 @@
         }
 
         #move_left {
-            vertical-align: center;
-            width: 50px;
-            height: 50px;
-            text-align: center;
-            font-size: 50px;
+            width: 60px;
+            height: 60px;
             left: 10px;
             top: 10px;
-            background: url("icons/left.png") 18px 21px no-repeat #EEE;
+            background: url("icons/left.png") center / 60% no-repeat #EEE;
         }
 
         #move_right {
-            width: 50px;
-            height: 50px;
-            vertical-align: center;
-            text-align: center;
-            font-size: 50px;
+            width: 60px;
+            height: 60px;
             right: 10px;
             top: 10px;
-            background: url("icons/right.png") 23px 21px no-repeat #EEE;
+            background: url("icons/right.png") center / 60% no-repeat #EEE;
         }
 
         #mobile_controls .button.down {
             background-color: #67bfff;
         }
 
+        /* ---- Overlay buttons (viz / AI) ---- */
         #refresh {
             color: #0093fc;
             cursor: pointer;
@@ -114,10 +120,10 @@
             position: absolute;
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             background: rgba(0,0,0,0.45);
             border-radius: 8px;
-            padding: 6px 11px;
+            padding: 5px 9px;
             cursor: pointer;
             user-select: none;
             touch-action: manipulation;
@@ -132,9 +138,19 @@
         }
         #viz_mode_btn span, #ai_toggle_btn span {
             color: #fff;
-            font-size: 1.2em;
+            font-size: clamp(0.85em, 3vw, 1.2em);
             font-family: monospace;
             letter-spacing: 0.03em;
+        }
+
+        /* ---- Info area ---- */
+        #info_area {
+            padding: 8px 4px;
+            line-height: 1.6;
+            touch-action: auto;
+        }
+        #info_area a {
+            touch-action: auto;
         }
 
     </style>
