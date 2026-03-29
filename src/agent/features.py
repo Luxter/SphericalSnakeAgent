@@ -1,7 +1,7 @@
 """
 Feature extraction for SphericalSnakeEnv.
 
-    compute_obs(snake, pellet, direction) -> np.ndarray[float32, (25,)]
+    compute_obs(snake, pellet, direction) -> np.ndarray[float32, (21,)]
 
 Observation layout:
   Index | Feature
@@ -12,10 +12,6 @@ Observation layout:
   3-20  | whiskers[18]        — 18 rays; 0=safe, 1=imminent collision
             Uniform 20° cones (10° half-angle), 20° spacing, full 360° coverage.
             0° (front), ±20°, ±40°, ±60°, ±80°, ±100°, ±120°, ±140°, ±160°, 180° (back).
-  21    | head_z              — z coordinate of head
-  22    | sin(direction)
-  23    | cos(direction)
-  24    | snake_len_norm       — len(snake) / 50
 """
 
 import math
@@ -51,7 +47,6 @@ _WHISKER_OFFSETS: tuple = (
 
 # Per-whisker half-angles: all π/18 (10°) — uniform 20° total cone width.
 _WHISKER_HALF_ANGLES: tuple = tuple(math.pi / 18 for _ in _WHISKER_OFFSETS)
-_WHISKER_COS_HALF: tuple = tuple(math.cos(h) for h in _WHISKER_HALF_ANGLES)
 
 # Maximum great-circle distance used to normalise whisker and pellet readings.
 _MAX_DIST: float = math.pi
@@ -72,7 +67,7 @@ def compute_obs(
     direction: float,
 ) -> np.ndarray:
     """
-    Return the 25-element float32 observation vector.
+    Return the 21-element float32 observation vector.
 
     Parameters
     ----------
@@ -81,7 +76,7 @@ def compute_obs(
     pellet     : (3,) float64 — unit-sphere food position.
     direction  : float — current heading angle (radians).
     """
-    obs = np.empty(25, dtype=np.float32)
+    obs = np.empty(21, dtype=np.float32)
 
     head = snake[0]
     cos_d = math.cos(direction)
@@ -177,21 +172,5 @@ def compute_obs(
         min_arcs = np.full(18, _MAX_DIST, dtype=np.float64)
 
     obs[3:21] = (1.0 - min_arcs / _MAX_DIST).astype(np.float32)
-
-    # ------------------------------------------------------------------
-    # Index 21 : head z coordinate
-    # ------------------------------------------------------------------
-    obs[21] = float(head[2])
-
-    # ------------------------------------------------------------------
-    # Indices 22-23 : sin/cos of direction
-    # ------------------------------------------------------------------
-    obs[22] = float(sin_d)
-    obs[23] = float(cos_d)
-
-    # ------------------------------------------------------------------
-    # Index 24 : snake length normalised
-    # ------------------------------------------------------------------
-    obs[24] = float(n_nodes / 50.0)
 
     return obs

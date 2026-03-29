@@ -59,7 +59,7 @@ def rotate_y(a: float, pts: np.ndarray) -> None:
 
 class SphericalSnakeEnv(gym.Env):
     """
-    observation_space: Box(shape=(25,), dtype=float32)  — see features.py
+    observation_space: Box(shape=(21,), dtype=float32)  — see features.py
     action_space:      Discrete(3)  — 0=STRAIGHT, 1=LEFT, 2=RIGHT
     """
 
@@ -78,7 +78,7 @@ class SphericalSnakeEnv(gym.Env):
             curriculum entirely and keep full backward compatibility.
         """
         super().__init__()
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(25,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-1.0, high=1.0, shape=(21,), dtype=np.float32)
         self.action_space = spaces.Discrete(3)
         self.curriculum_length: int = curriculum_length
 
@@ -113,7 +113,7 @@ class SphericalSnakeEnv(gym.Env):
 
         Returns
         -------
-        obs  : np.ndarray, shape (16,), dtype float32 — initial observation.
+        obs  : np.ndarray, shape (21,), dtype float32 — initial observation.
         info : dict — empty dict (no extra info on reset).
         """
         super().reset(seed=seed)
@@ -149,7 +149,7 @@ class SphericalSnakeEnv(gym.Env):
 
         Returns
         -------
-        obs        : np.ndarray, shape (16,), dtype float32.
+        obs        : np.ndarray, shape (21,), dtype float32.
         reward     : float — +1.0 pellet eaten, -1.0 self-collision,
                      +0.05*(prev_dist-new_dist) progress shaping, -0.001 time penalty.
         terminated : bool — True if the snake hit itself.

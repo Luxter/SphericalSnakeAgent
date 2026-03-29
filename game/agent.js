@@ -54,7 +54,7 @@ const _MAX_DIST = Math.PI;
 // dir     : game's `direction` (radians)
 // ---------------------------------------------------------------------------
 function _computeObs(snake, pellet, dir) {
-    const obs = new Float32Array(25);
+    const obs = new Float32Array(21);
 
     const cosD = Math.cos(dir);
     const sinD = Math.sin(dir);
@@ -126,16 +126,6 @@ function _computeObs(snake, pellet, dir) {
 
         obs[3 + wi] = 1.0 - minArc / _MAX_DIST;
     }
-
-    // --- index 21 : head z (invariantly -1 under world-rotation scheme) ---
-    obs[21] = snake[0].z;
-
-    // --- indices 22-23 : sin/cos of direction ---
-    obs[22] = sinD;
-    obs[23] = cosD;
-
-    // --- index 24 : snake length normalised ---
-    obs[24] = nNodes / 50.0;
 
     return obs;
 }
