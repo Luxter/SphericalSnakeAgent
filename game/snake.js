@@ -33,6 +33,10 @@ var leftDown, rightDown;
 
 var score = 0;
 
+// Visualization mode: "normal" | "ai_only" | "ai_overlay"
+var vizMode = "ai_overlay";
+
+// Whether the AI agent controls the snake (independent of vizMode).
 var aiMode = true;
 
 const btnMoveLeft = document.querySelector("#move_left");
@@ -269,18 +273,32 @@ function drawPoint(point, radius, red) {
 
 function render() {
     ctx.clearRect(0, 0, width, height);
-    for(var i = 0; i < points.length; i++) {
-        drawPoint(points[i], 1 / 250, 0);
+
+    // Sphere dot cloud — hidden in AI-only mode.
+    if (vizMode !== "ai_only") {
+        for(var i = 0; i < points.length; i++) {
+            drawPoint(points[i], 1 / 250, 0);
+        }
     }
-    for (var i = 0; i < snake.length; i++) {
-        drawPoint(snake[i], NODE_ANGLE, 120);
+
+    // Snake head always visible; body hidden in AI-only mode.
+    if (vizMode === "ai_only") {
+        if (snake.length > 0) drawPoint(snake[0], NODE_ANGLE, 120);
+    } else {
+        for (var i = 0; i < snake.length; i++) {
+            drawPoint(snake[i], NODE_ANGLE, 120);
+        }
     }
 
     drawPoint(pellet, NODE_ANGLE, 0);
 
-    // Draw whisker rays when the AI is playing.
-    if (aiMode && typeof drawWhiskers === 'function' && _lastObs) {
-        drawWhiskers(_lastObs);
+    // Whisker cones — shown in AI-only and AI-overlay modes.
+    // Always recompute obs so whiskers stay live even when the human plays.
+    if (vizMode !== "normal" && typeof drawWhiskers === 'function') {
+        if (typeof _computeObs === 'function') {
+            _lastObs = _computeObs(snake, pellet, direction);
+        }
+        if (_lastObs) drawWhiskers(_lastObs);
     }
 
     // Draw angle.
@@ -294,14 +312,16 @@ function render() {
     ctx.stroke();
     ctx.lineWidth = 1;
 
-    // Draw circle.
-    ctx.beginPath();
-    ctx.strokeStyle = "rgb(0,0,0)";
+    // Draw circle — hidden in AI-only mode.
+    if (vizMode !== "ai_only") {
+        ctx.beginPath();
+        ctx.strokeStyle = "rgb(0,0,0)";
 
-    // The radius value was determined experimentally.
-    // TODO: figure out the math behind this.
-    ctx.arc(centerX, centerY, .58 * focalLength, 0, Math.PI * 2);
-    ctx.stroke();
+        // The radius value was determined experimentally.
+        // TODO: figure out the math behind this.
+        ctx.arc(centerX, centerY, .58 * focalLength, 0, Math.PI * 2);
+        ctx.stroke();
+    }
 }
 
 // If pt is not provided, rotate all points.
@@ -384,6 +404,12 @@ function showEnd() {
     document.getElementsByTagName('body')[0].style = 'background: #E8E8E8';
     document.getElementById('gg').style = 'display:block';
     stopped = true;
+}
+
+// Re-render a single frozen frame when the game is stopped (e.g. to apply
+// a viz-mode change after death without restarting the game loop).
+function renderIfStopped() {
+    if (stopped || paused) render();
 }
 
 init();
