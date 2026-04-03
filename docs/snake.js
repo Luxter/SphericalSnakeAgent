@@ -297,8 +297,8 @@ function drawPoint(point, radius, red) {
         ctx.fill();
         return;
     } else {
-        // Sphere dots: dim cyan
-        ctx.fillStyle = "rgba(0, " + Math.round(depthColor * 0.6) + ", " + depthColor + ", " + (alpha * 0.4) + ")";
+        // Sphere dots: cyan
+        ctx.fillStyle = "rgba(0, " + Math.round(depthColor * 0.8) + ", " + depthColor + ", " + alpha + ")";
     }
     ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
     ctx.fill();
@@ -351,7 +351,7 @@ function render() {
     // Draw circle — hidden in AI-only mode.
     if (vizMode !== "ai_only") {
         ctx.beginPath();
-        ctx.strokeStyle = "rgba(0, 255, 231, 0.18)";
+        ctx.strokeStyle = "rgba(0, 255, 231, 0.45)";
 
         // The radius value was determined experimentally.
         // TODO: figure out the math behind this.
