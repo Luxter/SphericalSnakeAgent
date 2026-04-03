@@ -75,7 +75,7 @@ def lcg_init(env: TracingEnv) -> None:
     Replicate JS init() without going through gymnasium reset():
       1. Build pellet via LCG
       2. Build 8 snake nodes
-    Mirrors the exact order in game/snake.js init().
+    Mirrors the exact order in docs/snake.js init().
     """
     env.direction = STARTING_DIRECTION
     env.score = 0

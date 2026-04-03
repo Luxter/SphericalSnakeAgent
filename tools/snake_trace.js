@@ -1,7 +1,7 @@
 /**
  * tools/snake_trace.js  (Option B)
  *
- * Loads game/snake.js UNMODIFIED via vm.runInThisContext so its physics
+ * Loads docs/snake.js UNMODIFIED via vm.runInThisContext so its physics
  * functions and globals run in this process's global scope with zero copying.
  * Only changes from the browser environment:
  *   - Minimal DOM stubs satisfy snake.js's top-level querySelector/addEventListener calls
@@ -83,13 +83,13 @@ _lcgSeed(_seed);
 Math.random = _lcgRand;   // patch before load so init() → regeneratePellet() uses LCG
 
 // ---------------------------------------------------------------------------
-// 4. Load game/snake.js in THIS global context.
+// 4. Load docs/snake.js in THIS global context.
 //    vm.runInThisContext makes all its `var` globals (snake, pellet, direction,
 //    stopped, snakeVelocity, …) and functions (rotateZ, rotateY,
 //    applySnakeRotation, checkCollisions, …) accessible directly below.
 //    init() at the bottom of snake.js runs here, building the initial state.
 // ---------------------------------------------------------------------------
-var _snakeJsPath = path.join(__dirname, '..', 'game', 'snake.js');
+var _snakeJsPath = path.join(__dirname, '..', 'docs', 'snake.js');
 vm.runInThisContext(fs.readFileSync(_snakeJsPath, 'utf8'), { filename: _snakeJsPath });
 
 // After the above line, all of snake.js's globals are live in this scope:

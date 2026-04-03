@@ -1,14 +1,14 @@
 # tools — Physics Parity Verification
 
 These scripts verify that `src/agent/env.py` produces bit-for-bit identical state
-to `game/snake.js` by running both with the same deterministic inputs and diffing
+to `docs/snake.js` by running both with the same deterministic inputs and diffing
 the output.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `snake_trace.js` | Loads `game/snake.js` unmodified via Node's `vm.runInThisContext` with minimal DOM stubs. Replaces `Math.random` with a deterministic LCG. Accepts `--seed` and `--actions`, writes a JSON trace to stdout. |
+| `snake_trace.js` | Loads `docs/snake.js` unmodified via Node's `vm.runInThisContext` with minimal DOM stubs. Replaces `Math.random` with a deterministic LCG. Accepts `--seed` and `--actions`, writes a JSON trace to stdout. |
 | `snake_trace.py` | Python counterpart. Drives `SphericalSnakeEnv` physics with the same LCG. Accepts identical CLI args, writes identical JSON structure. |
 | `compare_traces.py` | Diffs two trace files field-by-field. Reports any divergence with tick, field name, JS value, Python value, and delta. Pass threshold: `max \|delta\| < 1e-9`. |
 
@@ -55,7 +55,7 @@ python3 tools/compare_traces.py /tmp/js_eat.json /tmp/py_eat.json
 ## How it works
 
 `snake_trace.js` sets up DOM stubs (`document.querySelector`, `window.addEventListener`,
-etc.) then executes `game/snake.js` verbatim using `vm.runInThisContext`. This brings
+etc.) then executes `docs/snake.js` verbatim using `vm.runInThisContext`. This brings
 all of snake.js's globals (`snake`, `pellet`, `direction`, `applySnakeRotation`, …)
 into scope with zero code duplication. `Math.random` is patched to the LCG **before**
 the script loads so `init() → regeneratePellet()` uses it from the first call.

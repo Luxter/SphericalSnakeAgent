@@ -2,7 +2,7 @@
 tools/agent_trace.py
 
 Run a trained SB3 PPO model and render a GIF of the episode using the real
-game/snake.js renderer, via render_video.js.
+docs/snake.js renderer, via render_video.js.
 
 Actions and pellet positions are recorded from the Python env and replayed
 through the JS physics, guaranteeing exact visual reproduction of what the

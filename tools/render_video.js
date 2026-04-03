@@ -2,7 +2,7 @@
  * tools/render_video.js
  *
  * Renders a GIF from an agent trace produced by tools/agent_trace.py.
- * Loads game/snake.js UNMODIFIED via vm.runInThisContext — identical to
+ * Loads docs/snake.js UNMODIFIED via vm.runInThisContext — identical to
  * snake_trace.js — but swaps the no-op canvas Proxy for a real node-canvas
  * so that snake.js's own render() function draws actual pixels.
  *
@@ -141,11 +141,11 @@ global.window = {
 };
 
 // ---------------------------------------------------------------------------
-// 5. Load game/snake.js in THIS global context — identical to snake_trace.js.
+// 5. Load docs/snake.js in THIS global context — identical to snake_trace.js.
 //    init() runs immediately: builds sphere grid, snake, calls regeneratePellet()
 //    (which triggers Math.random twice → consumes pellets[0]).
 // ---------------------------------------------------------------------------
-var _snakeJsPath = path.join(__dirname, '..', 'game', 'snake.js');
+var _snakeJsPath = path.join(__dirname, '..', 'docs', 'snake.js');
 vm.runInThisContext(fs.readFileSync(_snakeJsPath, 'utf8'), { filename: _snakeJsPath });
 
 // After this line: snake, pellet, direction, stopped, snakeVelocity,
