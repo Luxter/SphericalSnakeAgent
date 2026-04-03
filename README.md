@@ -1,5 +1,5 @@
 # Spherical Snake
 
-Snake game on a sphere. Play here: https://kevinalbs.com/spherical_snake
+Snake game on a sphere. Play here: https://luxter.github.io/SphericalSnakeAgent/
 
-![Spherical Snake Gameplay](./gameplay.gif)
+![Spherical Snake Gameplay](./docs/gameplay.gif)

@@ -162,7 +162,7 @@ def _render(
 def main() -> None:
     parser = argparse.ArgumentParser(description="Render agent GIFs from a trained model.")
     parser.add_argument("--model", required=True, help="Model .zip path or run directory.")
-    parser.add_argument("--max-steps", type=int, default=10_000, help="TimeLimit per episode.")
+    parser.add_argument("--max-steps", type=int, default=20_000, help="TimeLimit per episode.")
     parser.add_argument("--frame-skip", type=int, default=8, help="Render every Nth tick.")
     parser.add_argument("--fps", type=int, default=8, help="GIF playback frames per second.")
     parser.add_argument("--curriculum-length", type=int, default=0, help="Number of near-head pellets per episode.")
