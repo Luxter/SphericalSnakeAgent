@@ -10,7 +10,7 @@ Usage
 -----
     python -m agent.export_onnx runs/PPO_N/best/best_model.zip
     # → writes runs/PPO_N/best/best_model.onnx
-    # → writes runs/PPO_N/best/agent_model.js
+    # → writes runs/PPO_N/best/best_model.js  (var AGENT_ONNX_B64_BEST_MODEL)
 """
 
 import base64
@@ -74,10 +74,13 @@ def main(
     onnx.save(model_proto, out_path, save_as_external_data=False)
     print(f"Exported ONNX : {out_path}")
 
-    # Write agent_model.js next to the .onnx — base64-embedded for file:// origin.
-    js_path = Path(out_path).with_name("agent_model.js")
-    b64 = base64.b64encode(Path(out_path).read_bytes()).decode()
-    js_path.write_text(f'var AGENT_ONNX_B64 = "{b64}";\n')
+    # Write <checkpoint_name>.js next to the .onnx — base64-embedded for file:// origin.
+    onnx_path = Path(out_path)
+    js_name = onnx_path.stem
+    js_var = "AGENT_ONNX_B64_" + js_name.upper().replace("-", "_")
+    js_path = onnx_path.with_suffix(".js")
+    b64 = base64.b64encode(onnx_path.read_bytes()).decode()
+    js_path.write_text(f'var {js_var} = "{b64}";\n')
     print(f"Embedded JS   : {js_path}")
 
 
