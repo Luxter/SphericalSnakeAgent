@@ -76,11 +76,9 @@ def main(
 
     # Write <checkpoint_name>.js next to the .onnx — base64-embedded for file:// origin.
     onnx_path = Path(out_path)
-    js_name = onnx_path.stem
-    js_var = "AGENT_ONNX_B64_" + js_name.upper().replace("-", "_")
     js_path = onnx_path.with_suffix(".js")
     b64 = base64.b64encode(onnx_path.read_bytes()).decode()
-    js_path.write_text(f'var {js_var} = "{b64}";\n')
+    js_path.write_text(f'var AGENT_ONNX_B64 = "{b64}";\n')
     print(f"Embedded JS   : {js_path}")
 
 
