@@ -3,7 +3,8 @@
 A reinforcement learning agent trained to play Snake on the surface of a sphere using **Proximal Policy Optimization (PPO)**. The agent learns entirely from self-play in a custom [Gymnasium](https://gymnasium.farama.org/) environment with no hand-crafted heuristics.
 
 **[▶ Watch the agent play live in your browser](https://luxter.github.io/SphericalSnakeAgent/)**
-**[▶ Explanation and training video](https://www.youtube.com/watch?v=zIj5vRliYkY)
+
+**[▶ Explanation and training video](https://www.youtube.com/watch?v=zIj5vRliYkY)**
 
 ![Spherical Snake Agent Gameplay](./docs/gameplay.gif)
 
